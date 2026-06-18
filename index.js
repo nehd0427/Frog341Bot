@@ -422,13 +422,32 @@ ${getBossStatus(bosses.goldHerb).icon} Gold Herb - ${getBossStatus(bosses.goldHe
 
 *⏱️ Panel updates every 15 seconds.*`,
     inline: false
-},
-
+   },
 );
+
+try {
 
     await panelMessage.edit({
         embeds: [embed]
     });
+
+} catch (err) {
+
+    if (err.code === 10008) {
+
+        console.log(
+            `[PANEL REMOVED] Cleaning stale panel for ${channelId}`
+        );
+
+        delete data.channels[channelId];
+        saveData(data);
+
+        return;
+    }
+
+    throw err;
+}
+
 }
 
 // INTERACTION SETUP BUTTONS

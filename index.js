@@ -182,11 +182,13 @@ async function sendAutoDelete(
 
         } catch (err) {
 
-            console.error(
-                `[AUTO DELETE FAILED] ${msg.id}`,
-                err
-            );
-        }
+    if (err?.code === 10008) return;
+
+    console.error(
+        `[AUTO DELETE FAILED] ${msg.id}:`,
+        err.message || err
+    );
+}
 
     }, ms);
 

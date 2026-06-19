@@ -901,10 +901,11 @@ new StringSelectMenuBuilder()
         new ActionRowBuilder()
         .addComponents(menu);
 
-    await interaction.update({
+    await interaction.reply({
     content: 'Select ADC Plate',
-    components: [row]
-      });
+    components: [row],
+    flags: 64
+});
 
     return;
 }
@@ -1652,6 +1653,30 @@ if (interaction.customId === 'swap_claimtype') {
 
     const userId = interaction.user.id;
 
+   const alreadyHasClaim =
+    data.channels[channelId]
+        .userClaims?.[userId];
+
+if (alreadyHasClaim) {
+
+    return interaction.reply({
+        content: '❌ You already have an active claim.',
+        flags: 64
+    });
+}
+
+const alreadyReserved =
+    Object.values(data.channels[channelId].adc)
+        .some(x => x.reserveId === userId);
+
+if (alreadyReserved) {
+
+    return interaction.reply({
+        content: '❌ You already have an active reserve.',
+        flags: 64
+    });
+}
+
     const cooldown =
         getCooldown(
             data,
@@ -1715,13 +1740,12 @@ if (interaction.customId === 'swap_claimtype') {
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
-        content:
-            `✅ Reserved ADC ${spot.toUpperCase()}.`,
-        flags: 64
-    });
+    await interaction.update({
+    content: `✅ Reserved ADC ${spot.toUpperCase()}.`,
+    components: []
+});
 
-    return;
+return;
 }
 
     if (interaction.customId === 'claimtype') {
@@ -1753,9 +1777,10 @@ if (interaction.customId === 'swap_claimtype') {
                 new ActionRowBuilder()
                 .addComponents(adcMenu);
 
-            await interaction.update({
-     content: 'Select ADC Plate',
-     components: [row]
+            await interaction.reply({
+    content: 'Select ADC Plate',
+    components: [row],
+    flags: 64
 });
 
             return;
@@ -1780,10 +1805,11 @@ if (interaction.customId === 'swap_claimtype') {
         new ActionRowBuilder()
         .addComponents(ticketMenu);
 
-    await interaction.update({
+    await interaction.reply({
     content: 'Select Ticket Count',
-    components: [row]
-})
+    components: [row],
+    flags: 64
+});
 
     return;
 }
@@ -2172,6 +2198,15 @@ return;
     const adc =
     data.channels[channelId].adc[spot];
 
+    if (adc.reserveId === interaction.user.id) {
+
+    return interaction.reply({
+        content: `❌ You already reserved ADC ${spot.toUpperCase()}.`,
+        flags: 64
+    });
+
+}
+
     const existingClaim =
     data.channels[channelId]
         ?.userClaims?.[interaction.user.id];
@@ -2387,7 +2422,13 @@ data.channels[channelId].panelMessageId = panelMessage.id;
 
 await saveData(data);
 
-    await interaction.reply({
+console.log(
+    '[SETUP]',
+    interaction.replied,
+    interaction.deferred
+);
+
+    return await interaction.reply({
         content: 'Panel created.',
         flags: 64
     });
@@ -2737,10 +2778,9 @@ if (interaction.commandName === 'forceswap') {
 
     if (from === to) {
 
-        return interaction.reply({
+        return interaction.editReply({
             content:
                 '❌ Cannot swap the same spot.',
-            flags: 64
         });
     }
 
@@ -2752,10 +2792,9 @@ if (interaction.commandName === 'forceswap') {
 
     if (!fromSpot.ownerId) {
 
-        return interaction.reply({
+        return interaction.editReply({
             content:
                 `❌ ADC ${from.toUpperCase()} is empty.`,
-            flags: 64
         });
     }
 
@@ -2892,10 +2931,9 @@ if (interaction.commandName === 'settimer') {
 
         if (!spot.ownerId) {
 
-            return interaction.reply({
+            return interaction.ediReply({
                 content:
                     `❌ ADC ${target.toUpperCase()} is empty.`,
-                flags: 64
             });
         }
 

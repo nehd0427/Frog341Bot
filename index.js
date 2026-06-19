@@ -139,22 +139,35 @@ function getCooldown(data, channelId, userId) {
     return expires;
 }
 
-function addCooldown(data, channelId, userId) {
+async function addCooldown(
+    data,
+    channelId,
+    userId
+) {
 
     data.channels[channelId]
         .userCooldowns[userId] =
         Date.now() + (5 * 60 * 1000);
 
-    saveData(data);
+    await saveData(data);
 }
 
 // Save Data
 
+let saveQueue =
+    Promise.resolve();
+
 function saveData(data) {
-    fs.writeFileSync(
-        'data.json',
-        JSON.stringify(data, null, 2)
-    );
+
+    saveQueue =
+        saveQueue.then(() =>
+            fs.promises.writeFile(
+                'data.json',
+                JSON.stringify(data, null, 2)
+            )
+        );
+
+    return saveQueue;
 }
 
 async function sendAutoDelete(
@@ -279,7 +292,7 @@ try {
 
     delete data.channels[channelId];
 
-    saveData(data);
+    await await saveData(data);
    
     return;
 }
@@ -440,7 +453,7 @@ try {
         );
 
         delete data.channels[channelId];
-        saveData(data);
+        await saveData(data);
 
         return;
     }
@@ -665,7 +678,7 @@ if (interaction.customId === 'endclaim') {
         });
     }
 
-    if (claim.chamberType === 'boss') {
+if (claim.chamberType === 'boss') {
 
     const boss =
         data.channels[channelId].bossRotation;
@@ -675,23 +688,33 @@ if (interaction.customId === 'endclaim') {
     boss.tickets = 0;
     boss.expiresAt = null;
 
-    delete data.channels[channelId]
-        .userClaims[userId];
+    delete data.channels[channelId].userClaims[userId];
 
-    saveData(data);
+  // HARDCLEANUP
+    Object.values(data.channels[channelId].adc).forEach(adc => {
 
-    console.log(
-        `[END CLAIM] ${interaction.member.displayName} released Boss Rotation`
-    );
+        if (adc.reserveId === userId) {
+            adc.reserve = null;
+            adc.reserveId = null;
+            adc.reserveExpiresAt = null;
+        }
+
+        if (adc.ownerId === userId) {
+            adc.owner = null;
+            adc.ownerId = null;
+            adc.tickets = 0;
+            adc.expiresAt = null;
+        }
+    });
+
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
+    return interaction.reply({
         content: '✅ Boss Rotation released.',
         flags: 64
     });
-
-    return;
 }
 
     if (claim.spot) {
@@ -728,13 +751,13 @@ if (adcSpot.reserveId) {
     delete data.channels[channelId]
         .userClaims[userId];
 
-    addCooldown(
+    await addCooldown(
     data,
     channelId,
     userId
     );
 
-    saveData(data);
+    await saveData(data);
 
     console.log(
         `[END CLAIM] ${interaction.member.displayName} released ${claim.type}`
@@ -1021,7 +1044,7 @@ if (interaction.customId === 'leader1') {
     leader1.expiresAt =
         Date.now() + (30 * 60 * 1000);
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -1072,7 +1095,7 @@ if (interaction.customId === 'leader2') {
     leader2.expiresAt =
         Date.now() + (60 * 60 * 1000);
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -1120,22 +1143,37 @@ if (interaction.customId === 'leader3') {
         });
     }
 
-    const now = new Date();
+const nowUtc = Date.now();
+
+const nowLocal =
+    new Date(nowUtc + (8 * 60 * 60 * 1000));
 
 const spawnHours = [
-    0, 3, 6, 9,
-    12, 15, 18, 21
+    0,
+    3,
+    6,
+    9,
+    12,
+    15,
+    18,
+    21
 ];
 
 let nextSpawn = null;
 
 for (const hour of spawnHours) {
 
-    const candidate = new Date(now);
+    const candidate =
+        new Date(nowLocal);
 
-    candidate.setHours(hour, 0, 0, 0);
+    candidate.setUTCHours(
+        hour,
+        0,
+        0,
+        0
+    );
 
-    if (candidate.getTime() > now.getTime()) {
+    if (candidate.getTime() > nowLocal.getTime()) {
 
         nextSpawn = candidate;
         break;
@@ -1144,21 +1182,26 @@ for (const hour of spawnHours) {
 
 if (!nextSpawn) {
 
-    nextSpawn = new Date(now);
+    nextSpawn =
+        new Date(nowLocal);
 
-    nextSpawn.setDate(
-        nextSpawn.getDate() + 1
+    nextSpawn.setUTCDate(
+        nextSpawn.getUTCDate() + 1
     );
 
-    nextSpawn.setHours(
-        0, 0, 0, 0
+    nextSpawn.setUTCHours(
+        0,
+        0,
+        0,
+        0
     );
 }
 
 leader3.expiresAt =
-    nextSpawn.getTime();
+    nextSpawn.getTime() -
+    (8 * 60 * 60 * 1000);
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -1209,7 +1252,7 @@ if (interaction.customId === 'goldore') {
     goldOre.expiresAt =
         Date.now() + (31 * 60 * 1000);
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -1260,7 +1303,7 @@ if (interaction.customId === 'goldherb') {
     goldHerb.expiresAt =
         Date.now() + (31 * 60 * 1000);
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -1339,7 +1382,7 @@ if (interaction.customId.startsWith('tickets_')) {
    
  };
 
-    saveData(data);
+    await saveData(data);
 
     const claimPanel = await interaction.channel.send({
     content:
@@ -1362,7 +1405,7 @@ if (interaction.customId.startsWith('tickets_')) {
 
     data.channels[channelId].userClaims[userId].claimPanelMessageId = claimPanel.id;
 
-saveData(data);
+await saveData(data);
 
     console.log(
 `[CLAIM] ${interaction.member.displayName} claimed ADC ${spot.toUpperCase()} (${tickets} ticket(s))`
@@ -1515,7 +1558,7 @@ if (interaction.customId === 'swap_claimtype') {
 
         delete claim.spot;
 
-        saveData(data);
+        await saveData(data);
 
         const panel =
             await interaction.channel.messages.fetch(
@@ -1668,7 +1711,7 @@ if (interaction.customId === 'swap_claimtype') {
     adc.reserveId =
         interaction.user.id;
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -1851,7 +1894,7 @@ claim.spot = spot;
 claim.type = `ADC ${spot.toUpperCase()}`;
 claim.chamberType = 'adc';
 
-addCooldown(
+await addCooldown(
     data,
     channelId,
     userId
@@ -1861,7 +1904,7 @@ console.log(
 `[SWAP] ${interaction.member.displayName} Swap successful. ${spot.toUpperCase()}`
 );
 
-saveData(data);
+await saveData(data);
 
 const panelId = claim.claimPanelMessageId;
 
@@ -1980,7 +2023,7 @@ return;
         claimPanelMessageId: null
     };
 
-    saveData(data);
+    await saveData(data);
 
     const claimPanel =
         await interaction.channel.send({
@@ -2009,7 +2052,7 @@ return;
         .claimPanelMessageId =
         claimPanel.id;
 
-    saveData(data);
+    await saveData(data);
 
     console.log(
 `[CLAIM] ${interaction.member.displayName} claimed Boss Rotation (${tickets} ticket(s))`
@@ -2102,7 +2145,7 @@ return;
             claim.expiresAt;
     }
 
-    saveData(data);
+    await saveData(data);
 
 await updatePanel(
     interaction.channel
@@ -2342,7 +2385,7 @@ const panelMessage = await interaction.channel.send({
 
 data.channels[channelId].panelMessageId = panelMessage.id;
 
-saveData(data);
+await saveData(data);
 
     await interaction.reply({
         content: 'Panel created.',
@@ -2376,7 +2419,7 @@ if (panelId) {
 
 delete data.channels[channelId];
 
-saveData(data);
+await saveData(data);
 
 await interaction.reply({
     content: 'Panel removed.',
@@ -2393,7 +2436,7 @@ if (interaction.commandName === 'removecd') {
     delete data.channels[channelId]
         .userCooldowns[user.id];
 
-    saveData(data);
+    await saveData(data);
 
     return interaction.reply({
         content:
@@ -2413,7 +2456,7 @@ if (interaction.commandName === 'forcereset') {
     data.channels[channelId].panelMessageId =
         panelId;
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -2463,7 +2506,7 @@ if (interaction.commandName === 'reset') {
         boss.tickets = 0;
         boss.expiresAt = null;
 
-        saveData(data);
+        await saveData(data);
 
         await updatePanel(interaction.channel);
 
@@ -2509,7 +2552,7 @@ if (interaction.commandName === 'reset') {
     adc.reserveId = null;
     adc.reserveExpiresAt = null;
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -2578,7 +2621,21 @@ if (interaction.commandName === 'addadc') {
         Date.now() +
         (tickets * 30 * 60 * 1000);
 
-    saveData(data);
+    if (discordUser) {
+
+    data.channels[channelId]
+        .userClaims[discordUser.id] = {
+
+        type: `ADC ${spot.toUpperCase()}`,
+        spot,
+        tickets,
+        expiresAt: adc.expiresAt,
+        chamberType: 'adc',
+        claimPanelMessageId: null
+    };
+}
+
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -2601,34 +2658,61 @@ if (interaction.commandName === 'removeclaim') {
 
     if (type === 'boss') {
 
-        const boss =
-            data.channels[channelId].bossRotation;
+    const boss =
+        data.channels[channelId].bossRotation;
 
-        boss.owner = null;
-        boss.ownerId = null;
-        boss.tickets = 0;
-        boss.expiresAt = null;
+    const ownerId = boss.ownerId;
 
-        saveData(data);
+    if (
+        ownerId &&
+        data.channels[channelId].userClaims
+    ) {
 
-        await updatePanel(interaction.channel);
-
-        return interaction.reply({
-            content:
-                '✅ Boss Rotation cleared.',
-            flags: 64
-        });
+        delete data.channels[channelId]
+            .userClaims[ownerId];
     }
+
+    boss.owner = null;
+    boss.ownerId = null;
+    boss.tickets = 0;
+    boss.expiresAt = null;
+
+    await saveData(data);
+
+    await updatePanel(interaction.channel);
+
+    return interaction.reply({
+        content:
+            '✅ Boss Rotation cleared.',
+        flags: 64
+    });
+}
 
     const adc =
         data.channels[channelId].adc[type];
 
-    adc.owner = null;
-    adc.ownerId = null;
-    adc.tickets = 0;
-    adc.expiresAt = null;
+const ownerId =
+        adc.ownerId;
 
-    saveData(data);
+if (
+    ownerId &&
+    data.channels[channelId].userClaims
+) {
+
+    delete data.channels[channelId]
+        .userClaims[ownerId];
+}
+
+adc.owner = null;
+adc.ownerId = null;
+adc.tickets = 0;
+adc.expiresAt = null;
+
+adc.reserve = null;
+adc.reserveId = null;
+adc.reserveExpiresAt = null;
+
+    await saveData(data);
 
     await updatePanel(interaction.channel);
 
@@ -2773,7 +2857,7 @@ if (interaction.commandName === 'forceswap') {
             `ADC ${from.toUpperCase()}`;
     }
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(
         interaction.channel
@@ -2838,7 +2922,7 @@ if (interaction.commandName === 'settimer') {
             expiresAt;
     }
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(
         interaction.channel
@@ -2938,7 +3022,7 @@ if (boss === 'goldore')
 if (boss === 'goldherb')
     bosses.goldHerb.expiresAt = expiresAt;
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(
         interaction.channel
@@ -3232,7 +3316,7 @@ setInterval(async () => {
     boss.tickets = 0;
     boss.expiresAt = null;
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(channel);
 }
@@ -3253,7 +3337,7 @@ setInterval(async () => {
     const expiredReserveId =
         adc.reserveId;
 
-    addCooldown(
+    await addCooldown(
         data,
         channelId,
         expiredReserveId
@@ -3272,7 +3356,7 @@ setInterval(async () => {
         `🟢 Reserve expired. ADC ${spot.toUpperCase()} is now open.`
     );
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(channel);
 }
@@ -3340,7 +3424,7 @@ delete data.channels[channelId]
         }
     }
 
-    saveData(data);
+    await saveData(data);
 
     await updatePanel(channel);
 

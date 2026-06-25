@@ -4,8 +4,16 @@ const fs = require('fs');
 
 function defaultServerData() {
     return {
+    channelConfig: {
+        adcMode: 'single'
+    },
+
+    panelMessageId: null,
+    ms11PanelMessageId: null,
 
     userClaims: {},
+
+    specialClaims: {},
 
     userCooldowns: {},
 
@@ -14,37 +22,81 @@ function defaultServerData() {
                 owner: null,
                 ownerId: null,
                 tickets: 0,
-                reserve: null,
-                reserveId: null,
-                reserveExpiresAt: null,
                 expiresAt: null
             },
             center: {
                 owner: null,
                 ownerId: null,
                 tickets: 0,
-                reserve: null,
-                reserveId: null,
-                reserveExpiresAt: null,
                 expiresAt: null
             },
             right: {
                 owner: null,
                 ownerId: null,
                 tickets: 0,
-                reserve: null,
-                reserveId: null,
-                reserveExpiresAt: null,
                 expiresAt: null
             }
         },
 
-        bossRotation: {
+        adc2: {
+    left: {
         owner: null,
         ownerId: null,
         tickets: 0,
         expiresAt: null
-        },
+    },
+    center: {
+        owner: null,
+        ownerId: null,
+        tickets: 0,
+        expiresAt: null
+    },
+    right: {
+        owner: null,
+        ownerId: null,
+        tickets: 0,
+        expiresAt: null
+    }
+},
+
+        bossRotation: {
+    slot1: {
+        owner: null,
+        ownerId: null,
+        tickets: 0,
+        expiresAt: null
+    },
+
+    slot2: {
+        owner: null,
+        ownerId: null,
+        tickets: 0,
+        expiresAt: null
+    },
+
+    slot3: {
+        owner: null,
+        ownerId: null,
+        tickets: 0,
+        expiresAt: null
+    }
+},
+
+     specialChambers: {
+    frenzy: {
+        claims: []
+    },
+    fury: {
+        claims: []
+    },
+    lucky: {
+        claims: []
+    },
+    others: {
+        claims: []
+    }
+
+},
 
         bosses: {
         leader1: {
@@ -60,6 +112,9 @@ function defaultServerData() {
           expiresAt: null
         },
         goldHerb: {
+          expiresAt: null
+        },
+        sealingChamber: {
           expiresAt: null
         }
      }
@@ -173,7 +228,7 @@ function saveData(data) {
 async function sendAutoDelete(
     channel,
     content,
-    ms = 1200000
+    ms = 600000
 ) {
 
     const msg =
@@ -264,12 +319,52 @@ client.once('clientReady', async () => {
 
 // UPDATEPANEL
 
-async function updatePanel(channel) {
+async function updatePanel(channel, data = null) {
 
-    const data = loadData();
+    data ??= loadData();
     const channelId = channel.id;
 
     if (!data.channels[channelId]) return;
+
+if (!data.channels[channelId].adc2) {
+    data.channels[channelId].adc2 = defaultServerData().adc2;
+}
+
+if (!data.channels[channelId].adc) {
+    data.channels[channelId].adc = defaultServerData().adc;
+}
+
+if (!data.channels[channelId].bosses) {
+    data.channels[channelId].bosses = defaultServerData().bosses;
+}
+
+if (!data.channels[channelId].bossRotation) {
+    data.channels[channelId].bossRotation = defaultServerData().bossRotation;
+}
+
+if (!data.channels[channelId].channelConfig) {
+
+    data.channels[channelId].channelConfig = {
+        adcMode: 'single'
+    };
+}
+
+if (!('ms11PanelMessageId' in data.channels[channelId])) {
+
+    data.channels[channelId]
+        .ms11PanelMessageId = null;
+}
+
+if (!data.channels[channelId].specialChambers) {
+
+    data.channels[channelId].specialChambers =
+        defaultServerData().specialChambers;
+}
+
+if (!data.channels[channelId].specialClaims) {
+
+    data.channels[channelId].specialClaims = {};
+}
 
     const panelMessageId =
         data.channels[channelId].panelMessageId;
@@ -292,7 +387,7 @@ try {
 
     delete data.channels[channelId];
 
-    await await saveData(data);
+    await saveData(data);
    
     return;
 }
@@ -304,6 +399,16 @@ try {
 
     const right =
         data.channels[channelId].adc.right;
+
+    const left2 =
+        data.channels[channelId].adc2.left;
+
+    const center2 =
+        data.channels[channelId].adc2.center;
+
+    const right2 =
+        data.channels[channelId].adc2.right;
+
     const bosses =
     data.channels[channelId].bosses;
 
@@ -322,11 +427,25 @@ if (!bosses.goldOre || typeof bosses.goldOre !== 'object')
 if (!bosses.goldHerb || typeof bosses.goldHerb !== 'object')
     bosses.goldHerb = { expiresAt: null };
 
-    const boss =
-        data.channels[channelId].bossRotation;
+    const bossesRotation =
+    data.channels[channelId].bossRotation;
+
+const bossSlots = [
+    bossesRotation.slot1,
+    bossesRotation.slot2,
+    bossesRotation.slot3
+];
+
+const occupiedBoss =
+    bossSlots.filter(x => x.ownerId).length;
 
     const occupied =
         [left, center, right]
+        .filter(x => x.ownerId)
+        .length;
+
+    const occupied2 =
+        [left2, center2, right2]
         .filter(x => x.ownerId)
         .length;
 
@@ -371,80 +490,155 @@ function getBossStatus(boss) {
     };
 }
 
-    const embed = new EmbedBuilder()
-        .setColor(0x57F287)
-        .setTitle('🐸 青蛙・341')
-        .setDescription('Claim a chamber using the button below.')
+const adcMode =
+    data.channels[channelId]
+        ?.channelConfig
+        ?.adcMode || 'single';
 
-        .addFields(
-        {
-            name: 'ㅤADC STATUS',
-            value: `🚦 ${occupied}/3 Occupied\n\u200B`,
-            inline: false
-        },
+    const fields = [];
 
-        {
-            name: `${left.ownerId ? '🔴' : '🟢'} LEFT`,
-            value:
+const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('🐸 青蛙・341')
+    .setDescription('Claim a chamber using the button below.')
+    .setThumbnail('https://cdn.discordapp.com/attachments/1499493291706552340/1519576349843390565/341server.png?ex=6a3e0f42&is=6a3cbdc2&hm=c879d96d8edcd91b18dfecff4ba5ccabde5951b09647390152187bf9eeb73254&');
+
+fields.push(
+    {
+
+    name: 'ㅤADC I-I STATUS',
+    value: `🚦 ${occupied}/3 Occupied\n\u200B`,
+    inline: false
+},
+
+{
+    name: `${left.ownerId ? '🔴' : '🟢'} LEFT`,
+    value:
 `Status: ${left.ownerId ? 'OCCUPIED' : 'FREE'}
 👤: ${left.owner || 'None'}
 🎟: ${left.tickets}
-⏰: ${getRemainingTime(left.expiresAt)}
+⏰: ${getRemainingTime(left.expiresAt)}`,
+    inline: true
+},
 
-📌 ${left.reserve || 'None'}`,
-            inline: true
-        },
-
-        {
-            name: `${center.ownerId ? '🔴' : '🟢'} CENTER`,
-            value:
+{
+    name: `${center.ownerId ? '🔴' : '🟢'} CENTER`,
+    value:
 `Status: ${center.ownerId ? 'OCCUPIED' : 'FREE'}
 👤: ${center.owner || 'None'}
 🎟: ${center.tickets}
-⏰: ${getRemainingTime(center.expiresAt)}
+⏰: ${getRemainingTime(center.expiresAt)}`,
+    inline: true
+},
 
-📌 ${center.reserve || 'None'}`,
-            inline: true
-        },
-
-        {
-            name: `${right.ownerId ? '🔴' : '🟢'} RIGHT`,
-            value:
+{
+    name: `${right.ownerId ? '🔴' : '🟢'} RIGHT`,
+    value:
 `Status: ${right.ownerId ? 'OCCUPIED' : 'FREE'}
 👤: ${right.owner || 'None'}
 🎟: ${right.tickets}
-⏰: ${getRemainingTime(right.expiresAt)}
+⏰: ${getRemainingTime(right.expiresAt)}`,
+    inline: true
+}
 
-📌 ${right.reserve || 'None'}`,
-            inline: true
-        },
+);
+
+if (adcMode === 'dual') {
+
+fields.push(
 
 {
     name:
 `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${boss.ownerId ? '🔴' : '🟢'} BOSS ROTATION`,
+ㅤADC I-II STATUS`,
+    value: `🚦 ${occupied2}/3 Occupied\n\u200B`,
+    inline: false
+},
+
+{
+    name: `${left2.ownerId ? '🔴' : '🟢'} LEFT`,
     value:
-`👤: ${boss.owner || 'Free to Claim'}
-⏰: ${getRemainingTime(boss.expiresAt)}
+`Status: ${left2.ownerId ? 'OCCUPIED' : 'FREE'}
+👤: ${left2.owner || 'None'}
+🎟: ${left2.tickets}
+⏰: ${getRemainingTime(left2.expiresAt)}`,
+    inline: true
+},
+
+{
+    name: `${center2.ownerId ? '🔴' : '🟢'} CENTER`,
+    value:
+`Status: ${center2.ownerId ? 'OCCUPIED' : 'FREE'}
+👤: ${center2.owner || 'None'}
+🎟: ${center2.tickets}
+⏰: ${getRemainingTime(center2.expiresAt)}`,
+    inline: true
+},
+
+{
+    name: `${right2.ownerId ? '🔴' : '🟢'} RIGHT`,
+    value:
+`Status: ${right2.ownerId ? 'OCCUPIED' : 'FREE'}
+👤: ${right2.owner || 'None'}
+🎟: ${right2.tickets}
+⏰: ${getRemainingTime(right2.expiresAt)}`,
+    inline: true
+}
+
+);
+
+}
+
+fields.push(
+
+{
+    name:
+`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${occupiedBoss > 0 ? '🔴' : '🟢'} BOSS ROTATION & MINING/GATHERING`,
+    value:
+`🚦 ${occupiedBoss}/3 Occupied
+
+👤: ${bossesRotation.slot1.owner || 'Free'}${
+    bossesRotation.slot1.owner
+        ? `\n   ⏰: ${getRemainingTime(bossesRotation.slot1.expiresAt)}`
+        : ''
+}
+👤: ${bossesRotation.slot2.owner || 'Free'}${
+    bossesRotation.slot2.owner
+        ? `\n   ⏰: ${getRemainingTime(bossesRotation.slot2.expiresAt)}`
+        : ''
+}
+👤: ${bossesRotation.slot3.owner || 'Free'}${
+    bossesRotation.slot3.owner
+        ? `\n   ⏰: ${getRemainingTime(bossesRotation.slot3.expiresAt)}`
+        : ''
+}
 
 ${getBossStatus(bosses.leader1).icon} Leader I - ${getBossStatus(bosses.leader1).text}
 ${getBossStatus(bosses.leader2).icon} Leader II - ${getBossStatus(bosses.leader2).text}
 ${getBossStatus(bosses.leader3).icon} Leader III - ${getBossStatus(bosses.leader3).text}
 ${getBossStatus(bosses.goldOre).icon} Gold Ore - ${getBossStatus(bosses.goldOre).text}
 ${getBossStatus(bosses.goldHerb).icon} Gold Herb - ${getBossStatus(bosses.goldHerb).text}
+${getBossStatus(bosses.sealingChamber).icon} Sealing Chamber - ${getBossStatus(bosses.sealingChamber).text}
 
 *⏱️ Panel updates every 15 seconds.*`,
     inline: false
-   },
+}
+
 );
+
+embed.addFields(fields);
 
 try {
 
     await panelMessage.edit({
-        embeds: [embed]
-    });
+    embeds: [embed],
+    components: panelMessage.components ?? []
+});
 
 } catch (err) {
+
+    console.error('[UPDATE PANEL ERROR]', err);
 
     if (err.code === 10008) {
 
@@ -459,6 +653,171 @@ try {
     }
 
     throw err;
+}
+
+}
+
+// MS11 PANEL
+
+async function updateMS11Panel(channel, data = null) {
+
+    data ??= loadData();
+
+    const channelId = channel.id;
+
+    if (!data.channels[channelId]) return;
+
+    if (!data.channels[channelId].specialChambers) {
+
+    data.channels[channelId]
+        .specialChambers =
+        defaultServerData()
+            .specialChambers;
+}
+
+    const panelMessageId =
+        data.channels[channelId]
+            .ms11PanelMessageId;
+
+    if (!panelMessageId) return;
+
+    const chambers =
+        data.channels[channelId]
+            .specialChambers;
+
+    const frenzy = chambers.frenzy;
+    const fury = chambers.fury;
+    const lucky = chambers.lucky;
+    const others = chambers.others;
+
+    function getRemainingTime(expiresAt) {
+
+    if (!expiresAt)
+        return '--:--:--';
+
+    const remaining =
+        Math.max(
+            0,
+            expiresAt - Date.now()
+        );
+
+    const hours =
+        Math.floor(
+            remaining / 3600000
+        );
+
+    const minutes =
+        Math.floor(
+            (remaining % 3600000) / 60000
+        );
+
+    const seconds =
+        Math.floor(
+            (remaining % 60000) / 1000
+        );
+
+    return `${hours
+        .toString()
+        .padStart(2,'0')}:${minutes
+        .toString()
+        .padStart(2,'0')}:${seconds
+        .toString()
+        .padStart(2,'0')}`;
+}
+
+function formatMS11Claims(chamber) {
+
+    if (
+        !chamber.claims ||
+        chamber.claims.length === 0
+    ) {
+
+        return '👤: Free';
+    }
+
+    return chamber.claims
+        .map(claim =>
+`👤: ${claim.owner}
+⏰: ${getRemainingTime(
+    claim.expiresAt
+)}`
+        )
+        .join('\n\n');
+}
+
+const embed = new EmbedBuilder()
+    .setColor(0x57F287)
+    .setTitle('🐸 青蛙・341')
+    .setDescription('Claim a chamber using the button below.')
+    .setThumbnail(
+        'https://cdn.discordapp.com/attachments/1499493291706552340/1519576349843390565/341server.png'
+    )
+    .addFields(
+
+{
+    name:
+        `${frenzy.claims.length ? '🔴' : '🟢'} Frenzy Chamber`,
+    value:
+        formatMS11Claims(frenzy),
+    inline: false
+},
+
+{
+    name:
+        `${fury.claims.length ? '🔴' : '🟢'} Fury Chamber`,
+    value:
+        formatMS11Claims(fury),
+    inline: false
+},
+
+{
+    name:
+        `${lucky.claims.length ? '🔴' : '🟢'} Lucky Chamber`,
+    value:
+        formatMS11Claims(lucky),
+    inline: false
+},
+
+{
+    name:
+        `${others.claims.length ? '🔴' : '🟢'} Others Chamber`,
+    value:
+        formatMS11Claims(others),
+    inline: false
+}
+
+);
+
+let panelMessage;
+
+try {
+
+    panelMessage =
+        await channel.messages.fetch(
+            panelMessageId
+        );
+
+} catch (err) {
+
+    console.log(
+        `[MS11 PANEL NOT FOUND] ${channelId}`
+    );
+
+    return;
+}
+
+try {
+
+    await panelMessage.edit({
+        embeds: [embed]
+    });
+
+} catch (err) {
+
+    console.error(
+        '[MS11 UPDATE ERROR]',
+        err
+    );
 }
 
 }
@@ -552,20 +911,57 @@ let existingClaim =
 
 if (!existingClaim) {
 
-    const adcOwned = Object.values(
-        data.channels[channelId].adc
-    ).find(
-        spot => spot.ownerId === userId
-    );
+    const ownsBossRotation =
+    Object.values(
+        data.channels[channelId]
+            .bossRotation || {}
+    )
+    .find(slot =>
+    slot?.ownerId === userId
+);
+
+    if (ownsBossRotation) {
+
+        existingClaim = {
+            type: 'Boss Rotation'
+        };
+    }
+}
+
+if (!existingClaim) {
+
+    const adcOwned =
+    Object.values(data.channels[channelId].adc)
+        .find(spot => spot.ownerId === userId) ||
+
+    Object.values(data.channels[channelId].adc2)
+        .find(spot => spot.ownerId === userId);;
 
     if (adcOwned) {
-        existingClaim = {
-    type: `ADC ${Object.keys(data.channels[channelId].adc)
+        const adc1Spot =
+    Object.keys(data.channels[channelId].adc)
         .find(key =>
             data.channels[channelId].adc[key].ownerId === userId
-        )
-        .toUpperCase()}`
-       };
+        );
+
+const adc2Spot =
+    Object.keys(data.channels[channelId].adc2)
+        .find(key =>
+            data.channels[channelId].adc2[key].ownerId === userId
+        );
+
+if (adc1Spot) {
+
+    existingClaim = {
+        type: `ADC I-I ${adc1Spot.toUpperCase()}`
+    };
+
+} else if (adc2Spot) {
+
+    existingClaim = {
+        type: `ADC I-II ${adc2Spot.toUpperCase()}`
+    };
+}
 
     }
 }
@@ -579,61 +975,40 @@ if (existingClaim) {
     });
 }
 
-const reservedSpot =
-    Object.keys(data.channels[channelId].adc)
-    .find(key => {
+const options = [
 
-        const adc =
-            data.channels[channelId].adc[key];
+{
+    label: 'ADC I-I',
+    value: 'adc1'
+}
 
-        return (
-            adc.reserveId === userId &&
-            adc.reserveExpiresAt &&
-            Date.now() < adc.reserveExpiresAt
-        );
-    });
+];
 
-if (reservedSpot) {
+const adcMode =
+    data.channels[channelId]
+        ?.channelConfig
+        ?.adcMode || 'single';
 
-    const ticketMenu =
-        new StringSelectMenuBuilder()
-        .setCustomId(`tickets_${reservedSpot}`)
-        .setPlaceholder('Select Ticket Count')
-        .addOptions(
-            { label: '1 Ticket (30 mins)', value: '1' },
-            { label: '2 Tickets (1 hr)', value: '2' },
-            { label: '3 Tickets (1 hr 30 mins)', value: '3' },
-            { label: '4 Tickets (2 hrs)', value: '4' },
-            { label: '5 Tickets (2 hrs 30 mins)', value: '5' },
-            { label: '6 Tickets (3 hrs)', value: '6' }
-        );
+if (adcMode === 'dual') {
 
-    const row =
-        new ActionRowBuilder()
-        .addComponents(ticketMenu);
+    options.push({
 
-    return interaction.reply({
-        content:
-            `📌 Priority Claim for ADC ${reservedSpot.toUpperCase()}`,
-        components: [row],
-        flags: 64
+        label: 'ADC I-II',
+        value: 'adc2'
     });
 }
+
+options.push({
+
+    label: 'Boss Rotation & Mining/Gathering',
+    value: 'boss'
+});
 
 const chamberMenu =
 new StringSelectMenuBuilder()
 .setCustomId('claimtype')
 .setPlaceholder('Select Chamber Type')
-.addOptions(
-{
-    label: 'ADC',
-    value: 'adc'
-},
-{
-    label: 'Boss Rotation',
-    value: 'boss'
-}
-);
+.addOptions(options);
 
 const menuRow =
 new ActionRowBuilder()
@@ -646,23 +1021,136 @@ await interaction.reply({
 });
     }
 
+if (interaction.customId === 'ms11_claim') {
+
+    const data = loadData();
+
+    const channelId =
+        interaction.channel.id;
+
+    if (!data.channels[channelId]) {
+
+        return interaction.reply({
+            content: 'Panel not initialized.',
+            flags: 64
+        });
+    }
+
+    const existingClaim =
+        data.channels[channelId]
+            ?.specialClaims?.[
+                interaction.user.id
+            ];
+
+    if (existingClaim) {
+
+        return interaction.reply({
+            content:
+                '❌ You already own a MS11 chamber.',
+            flags: 64
+        });
+    }
+
+    const menu =
+        new StringSelectMenuBuilder()
+
+        .setCustomId('ms11_chamber')
+
+        .setPlaceholder(
+            'Select Chamber'
+        )
+
+        .addOptions(
+
+            {
+                label: 'Frenzy',
+                value: 'frenzy'
+            },
+
+            {
+                label: 'Fury',
+                value: 'fury'
+            },
+
+            {
+                label: 'Lucky',
+                value: 'lucky'
+            },
+
+            {
+                label: 'Others',
+                value: 'others'
+            }
+        );
+
+    const row =
+        new ActionRowBuilder()
+            .addComponents(menu);
+
+    return interaction.reply({
+
+        content:
+            'Select a chamber.',
+
+        components: [row],
+
+        flags: 64
+    });
+}
+
+// END CLAIM
+
 if (interaction.customId === 'endclaim') {
 
     const data = loadData();
     const channelId = interaction.channel.id;
     const userId = interaction.user.id;
 
+    const specialClaim =
+    data.channels[channelId]
+        ?.specialClaims?.[userId];
+
+    if (!data.channels[channelId]) {
+        return interaction.reply({
+            content: '❌ Panel data missing.',
+            flags: 64
+        });
+    }
+
+    data.channels[channelId].userClaims ??= {};
+
     const claim =
         data.channels[channelId]
-        .userClaims[userId];
+            .userClaims[userId];
 
-    if (claim?.claimPanelMessageId) {
+    if (specialClaim) {
+
+    const chamber =
+    data.channels[channelId]
+        .specialChambers[
+            specialClaim.chamber
+        ];
+
+    if (chamber?.claims) {
+
+    chamber.claims =
+        chamber.claims.filter(
+            x => x.ownerId !== userId
+        );
+}
+
+    console.log(
+    '[MS11 CLAIMS LEFT]',
+    chamber.claims.length
+);
+
+    if (specialClaim.claimPanelMessageId) {
 
     try {
 
         const msg =
             await interaction.channel.messages.fetch(
-                claim.claimPanelMessageId
+                specialClaim.claimPanelMessageId
             );
 
         await msg.delete();
@@ -670,145 +1158,259 @@ if (interaction.customId === 'endclaim') {
     } catch {}
 }
 
-    if (!claim) {
+    delete data.channels[channelId]
+        .specialClaims[userId];
 
+    console.log(
+    `[MS11 END] ${interaction.member.displayName} | ${specialClaim.chamber.toUpperCase()}`
+);
+
+    await saveData(data);
+
+    await updateMS11Panel(
+        interaction.channel
+    );
+
+    return interaction.reply({
+        content:
+            `✅ ${specialClaim.chamber.toUpperCase()} released.`,
+        flags: 64
+    });
+}
+
+    if (!claim) {
         return interaction.reply({
             content: 'No active claim found.',
             flags: 64
         });
     }
 
-if (claim.chamberType === 'boss') {
+    if (claim?.claimPanelMessageId) {
+        try {
+            const msg =
+                await interaction.channel.messages.fetch(
+                    claim.claimPanelMessageId
+                );
 
-    const boss =
-        data.channels[channelId].bossRotation;
+            await msg.delete();
+        } catch {}
+    }
 
-    boss.owner = null;
-    boss.ownerId = null;
-    boss.tickets = 0;
-    boss.expiresAt = null;
+    // BOSS ROTATION
+    if (claim.chamberType === 'boss') {
 
-    delete data.channels[channelId].userClaims[userId];
+        const slot =
+            data.channels[channelId]
+                .bossRotation?.[claim.bossSlot];
 
-  // HARDCLEANUP
-    Object.values(data.channels[channelId].adc).forEach(adc => {
-
-        if (adc.reserveId === userId) {
-            adc.reserve = null;
-            adc.reserveId = null;
-            adc.reserveExpiresAt = null;
+        if (slot) {
+            slot.owner = null;
+            slot.ownerId = null;
+            slot.tickets = 0;
+            slot.expiresAt = null;
         }
 
-        if (adc.ownerId === userId) {
-            adc.owner = null;
-            adc.ownerId = null;
-            adc.tickets = 0;
-            adc.expiresAt = null;
-        }
-    });
+        delete data.channels[channelId]
+            .userClaims[userId];
 
-    await saveData(data);
+        await saveData(data);
 
-    await updatePanel(interaction.channel);
+        await updatePanel(interaction.channel);
 
-    return interaction.reply({
-        content: '✅ Boss Rotation released.',
-        flags: 64
-    });
-}
+        return interaction.reply({
+            content: '✅ Boss Rotation released.',
+            flags: 64
+        });
+    }
 
+    // ADC / ADC2
     if (claim.spot) {
 
-    const releasedSpot = claim.spot;
+        const releasedSpot = claim.spot;
 
-const adcSpot =
-    data.channels[channelId]
-        .adc[releasedSpot];
+        let adcSpot;
 
-adcSpot.owner = null;
-adcSpot.ownerId = null;
-adcSpot.tickets = 0;
-adcSpot.expiresAt = null;
+        if (claim.chamberType === 'adc') {
 
-if (adcSpot.reserveId) {
+            adcSpot =
+                data.channels[channelId]
+                    .adc[releasedSpot];
 
-    adcSpot.reserveExpiresAt =
-        Date.now() + (3 * 60 * 1000);
+        } else if (claim.chamberType === 'adc2') {
 
-    await sendAutoDelete(
-        interaction.channel,
-        `<@${adcSpot.reserveId}> You have 3 minutes to claim ADC ${releasedSpot.toUpperCase()}.`
-    );
+            adcSpot =
+                data.channels[channelId]
+                    .adc2[releasedSpot];
+        }
+
+        if (adcSpot) {
+
+            adcSpot.owner = null;
+            adcSpot.ownerId = null;
+            adcSpot.tickets = 0;
+            adcSpot.expiresAt = null;
+        }
+
+        let releasedName;
+
+if (claim.chamberType === 'adc') {
+
+    releasedName =
+        `ADC I-I ${releasedSpot.toUpperCase()}`;
+
+} else if (claim.chamberType === 'adc2') {
+
+    releasedName =
+        `ADC I-II ${releasedSpot.toUpperCase()}`;
 
 } else {
 
-    await sendAutoDelete(
-        interaction.channel,
-        `🟢 ADC ${releasedSpot.toUpperCase()} is now available.`
-    );
+    releasedName =
+        claim.type;
 }
 
-    delete data.channels[channelId]
-        .userClaims[userId];
+await sendAutoDelete(
+    interaction.channel,
+    `🟢 ${releasedName} is now available.`
+);
 
-    await addCooldown(
-    data,
-    channelId,
-    userId
-    );
+        delete data.channels[channelId]
+            .userClaims[userId];
 
-    await saveData(data);
-
-    console.log(
-        `[END CLAIM] ${interaction.member.displayName} released ${claim.type}`
-    );
-
-    await updatePanel(interaction.channel);
-
-    await interaction.reply({
-        content: '✅ Claim ended.',
-        flags: 64
-    });
-
-    return;
-  }
-
-}
-
-   if (interaction.customId === 'swapclaim') {
-
-    const data = loadData();
-    const channelId = interaction.channel.id;
-    const userId = interaction.user.id;
-
-    const cooldown =
-        getCooldown(
+        await addCooldown(
             data,
             channelId,
             userId
         );
 
-    if (cooldown) {
+        await saveData(data);
+
+        console.log(
+            `[END CLAIM] ${interaction.member.displayName} released ${claim.type}`
+        );
+
+        await updatePanel(interaction.channel);
 
         return interaction.reply({
-            content:
-`❌ You are on cooldown (${formatCooldown(cooldown - Date.now())})`,
+            content: '✅ Claim ended.',
             flags: 64
         });
     }
 
-    const claim =
+}
+
+// SWAP CLAIM
+
+   if (interaction.customId === 'swapclaim') {
+
+    const data = loadData();
+const channelId = interaction.channel.id;
+const userId = interaction.user.id;
+
+const specialClaim =
     data.channels[channelId]
-        .userClaims[userId];
+        ?.specialClaims?.[userId];
+
+if (specialClaim) {
+
+    const menu =
+        new StringSelectMenuBuilder()
+
+            .setCustomId('ms11_swap')
+
+            .setPlaceholder(
+                'Select New Chamber'
+            )
+
+            .addOptions(
+                {
+                    label: 'Frenzy',
+                    value: 'frenzy'
+                },
+                {
+                    label: 'Fury',
+                    value: 'fury'
+                },
+                {
+                    label: 'Lucky',
+                    value: 'lucky'
+                },
+                {
+                    label: 'Others',
+                    value: 'others'
+                }
+            );
+
+    const row =
+        new ActionRowBuilder()
+            .addComponents(menu);
+
+    return interaction.reply({
+
+        content:
+            'Select new MS11 chamber.',
+
+        components: [row],
+
+        flags: 64
+    });
+}
+
+if (!data.channels[channelId]) {
+
+    return interaction.reply({
+        content: '❌ Panel data missing.',
+        flags: 64
+    });
+
+}
+
+data.channels[channelId].userClaims ??= {};
+
+const cooldown =
+    getCooldown(
+        data,
+        channelId,
+        userId
+    );
+
+if (cooldown) {
+
+    return interaction.reply({
+        content:
+`❌ You are on cooldown (${formatCooldown(cooldown - Date.now())})`,
+        flags: 64
+    });
+}
+
+const claim =
+    data.channels[channelId]
+        ?.userClaims?.[userId];
+
+if (!claim) {
+
+    return interaction.reply({
+        content: '❌ You do not have an active claim.',
+        flags: 64
+    });
+
+}
 
 let options = [];
 
-if (claim.chamberType === 'adc') {
+if (
+    claim.chamberType === 'adc' ||
+    claim.chamberType === 'adc2'
+) {
 
     options.push(
         {
-            label: 'ADC',
-            value: 'adc'
+            label: 'ADC I-I',
+            value: 'adc1'
+        },
+        {
+            label: 'ADC I-II',
+            value: 'adc2'
         },
         {
             label: 'Boss Rotation',
@@ -822,8 +1424,12 @@ if (claim.chamberType === 'boss') {
 
     options.push(
         {
-            label: 'ADC',
-            value: 'adc'
+            label: 'ADC I-I',
+            value: 'adc1'
+        },
+        {
+            label: 'ADC I-II',
+            value: 'adc2'
         }
     );
 
@@ -841,68 +1447,6 @@ new StringSelectMenuBuilder()
 
     await interaction.reply({
     content: 'Select new chamber type',
-    components: [row],
-    flags: 64
-});
-
-    return;
-}
-
-    if (interaction.customId === 'reserve') {
-
-    const data = loadData();
-    const channelId = interaction.channel.id;
-
-    const alreadyHasClaim =
-      data.channels[channelId]
-       .userClaims?.[interaction.user.id];
-
-    if (alreadyHasClaim) {
-     return interaction.reply({
-      content:
-    '❌ You already have an active claim.',
-      flags:64
-   });
-}
-
-    const alreadyReserved =
-        Object.values(data.channels[channelId].adc)
-            .some(x => x.reserveId === interaction.user.id);
-
-    if (alreadyReserved) {
-
-        return interaction.reply({
-            content:
-                '❌ You already have an active reserve.',
-            flags: 64
-        });
-    }
-
-    const menu =
-        new StringSelectMenuBuilder()
-        .setCustomId('reserve_spot')
-        .setPlaceholder('Select ADC Plate')
-        .addOptions(
-            {
-                label: 'LEFT',
-                value: 'left'
-            },
-            {
-                label: 'CENTER',
-                value: 'center'
-            },
-            {
-                label: 'RIGHT',
-                value: 'right'
-            }
-        );
-
-    const row =
-        new ActionRowBuilder()
-        .addComponents(menu);
-
-    await interaction.reply({
-    content: 'Select ADC Plate',
     components: [row],
     flags: 64
 });
@@ -938,22 +1482,6 @@ new StringSelectMenuBuilder()
                 '❌ Extension is only available when 5 minutes or less remain.',
             flags: 64
         });
-    }
-
-    if (claim.chamberType === 'adc') {
-
-        const adc =
-            data.channels[channelId]
-                .adc[claim.spot];
-
-        if (adc.reserveId) {
-
-            return interaction.reply({
-                content:
-                    '❌ Cannot extend while a reserve is waiting.',
-                flags: 64
-            });
-        }
     }
 
     let currentTickets =
@@ -1008,24 +1536,23 @@ new StringSelectMenuBuilder()
 // Boss Timer
 
 if (interaction.customId === 'leader1') {
+await interaction.deferReply({ flags: 64 });
 
     const data = loadData();
     const channelId = interaction.channel.id;
 
     const bossRotation =
-        data.channels[channelId].bossRotation;
+    data.channels[channelId].bossRotation;
 
-    if (
-        !bossRotation.ownerId ||
-        bossRotation.ownerId !== interaction.user.id
-    ) {
+const ownsBossRotation =
+    Object.values(bossRotation)
+        .some(slot => slot && slot.ownerId === interaction.user.id);
 
-        return interaction.reply({
-            content:
-                '❌ Only the Boss Rotation owner can mark bosses.',
-            flags: 64
-        });
-    }
+if (!ownsBossRotation) {
+    return interaction.editReply({
+        content: '❌ Only the Boss Rotation owner can mark bosses.'
+    });
+}
 
     const leader1 =
         data.channels[channelId].bosses.leader1;
@@ -1035,11 +1562,9 @@ if (interaction.customId === 'leader1') {
         Date.now() < leader1.expiresAt
     ) {
 
-        return interaction.reply({
-            content:
-                '❌ Leader I is already on cooldown.',
-            flags: 64
-        });
+        return interaction.editReply({
+    content: '❌ Leader I is already on cooldown.'
+});
     }
 
     leader1.expiresAt =
@@ -1049,34 +1574,32 @@ if (interaction.customId === 'leader1') {
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
-        content:
-            '✅ Leader I marked. Respawn timer starts.',
-        flags: 64
-    });
+    await interaction.editReply({
+    content:
+        '✅ Leader I marked. Respawn timer starts.'
+});
 
     return;
 }
 
 if (interaction.customId === 'leader2') {
+await interaction.deferReply({ flags: 64 });
 
     const data = loadData();
     const channelId = interaction.channel.id;
 
     const bossRotation =
-        data.channels[channelId].bossRotation;
+    data.channels[channelId].bossRotation;
 
-    if (
-        !bossRotation.ownerId ||
-        bossRotation.ownerId !== interaction.user.id
-    ) {
+const ownsBossRotation =
+    Object.values(bossRotation)
+        .some(slot => slot && slot.ownerId === interaction.user.id);
 
-        return interaction.reply({
-            content:
-                '❌ Only the Boss Rotation owner can mark bosses.',
-            flags: 64
-        });
-    }
+if (!ownsBossRotation) {
+    return interaction.editReply({
+        content: '❌ Only the Boss Rotation owner can mark bosses.'
+    });
+}
 
     const leader2 =
         data.channels[channelId].bosses.leader2;
@@ -1086,11 +1609,9 @@ if (interaction.customId === 'leader2') {
         Date.now() < leader2.expiresAt
     ) {
 
-        return interaction.reply({
-            content:
-                '❌ Leader II is already on cooldown.',
-            flags: 64
-        });
+        return interaction.editReply({
+    content: '❌ Leader II is already on cooldown.'
+});
     }
 
     leader2.expiresAt =
@@ -1100,34 +1621,32 @@ if (interaction.customId === 'leader2') {
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
-        content:
-            '✅ Leader II marked. Respawn timer started.',
-        flags: 64
-    });
+    await interaction.editReply({
+    content:
+        '✅ Leader II marked. Respawn timer starts.'
+});
 
     return;
 }
 
 if (interaction.customId === 'leader3') {
+await interaction.deferReply({ flags: 64 });
 
     const data = loadData();
     const channelId = interaction.channel.id;
 
     const bossRotation =
-        data.channels[channelId].bossRotation;
+    data.channels[channelId].bossRotation;
 
-    if (
-        !bossRotation.ownerId ||
-        bossRotation.ownerId !== interaction.user.id
-    ) {
+const ownsBossRotation =
+    Object.values(bossRotation)
+        .some(slot => slot && slot.ownerId === interaction.user.id);
 
-        return interaction.reply({
-            content:
-                '❌ Only the Boss Rotation owner can mark bosses.',
-            flags: 64
-        });
-    }
+if (!ownsBossRotation) {
+    return interaction.editReply({
+        content: '❌ Only the Boss Rotation owner can mark bosses.'
+    });
+}
 
     const leader3 =
         data.channels[channelId].bosses.leader3;
@@ -1137,11 +1656,9 @@ if (interaction.customId === 'leader3') {
         Date.now() < leader3.expiresAt
     ) {
 
-        return interaction.reply({
-            content:
-                '❌ Leader III is already on cooldown.',
-            flags: 64
-        });
+        return interaction.editReply({
+    content: '❌ Leader III is already on cooldown.'
+});
     }
 
 const nowUtc = Date.now();
@@ -1206,34 +1723,32 @@ leader3.expiresAt =
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
-        content:
-            '✅ Leader III marked. Respawn timer started.',
-        flags: 64
-    });
+    await interaction.editReply({
+    content:
+        '✅ Leader III marked. Respawn timer starts.'
+});
 
     return;
 }
 
 if (interaction.customId === 'goldore') {
+await interaction.deferReply({ flags: 64 });
 
     const data = loadData();
     const channelId = interaction.channel.id;
 
     const bossRotation =
-        data.channels[channelId].bossRotation;
+    data.channels[channelId].bossRotation;
 
-    if (
-        !bossRotation.ownerId ||
-        bossRotation.ownerId !== interaction.user.id
-    ) {
+const ownsBossRotation =
+    Object.values(bossRotation)
+        .some(slot => slot && slot.ownerId === interaction.user.id);
 
-        return interaction.reply({
-            content:
-                '❌ Only the Boss Rotation owner can mark bosses.',
-            flags: 64
-        });
-    }
+if (!ownsBossRotation) {
+    return interaction.editReply({
+        content: '❌ Only the Boss Rotation owner can mark bosses.',
+    });
+}
 
     const goldOre =
         data.channels[channelId].bosses.goldOre;
@@ -1243,10 +1758,9 @@ if (interaction.customId === 'goldore') {
         Date.now() < goldOre.expiresAt
     ) {
 
-        return interaction.reply({
+        return interaction.editReply({
             content:
                 '❌ Gold Ore is already on cooldown.',
-            flags: 64
         });
     }
 
@@ -1257,34 +1771,32 @@ if (interaction.customId === 'goldore') {
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
-        content:
-            '✅ Gold Ore marked. Respawn timer starts.',
-        flags: 64
-    });
+    await interaction.editReply({
+    content:
+        '✅ Gold Ore marked. Respawn timer starts.'
+});
 
     return;
 }
 
 if (interaction.customId === 'goldherb') {
+await interaction.deferReply({ flags: 64 });
 
     const data = loadData();
     const channelId = interaction.channel.id;
 
     const bossRotation =
-        data.channels[channelId].bossRotation;
+    data.channels[channelId].bossRotation;
 
-    if (
-        !bossRotation.ownerId ||
-        bossRotation.ownerId !== interaction.user.id
-    ) {
+const ownsBossRotation =
+    Object.values(bossRotation)
+        .some(slot => slot && slot.ownerId === interaction.user.id);
 
-        return interaction.reply({
-            content:
-                '❌ Only the Boss Rotation owner can mark bosses.',
-            flags: 64
-        });
-    }
+if (!ownsBossRotation) {
+    return interaction.editReply({
+        content: '❌ Only the Boss Rotation owner can mark bosses.',
+    });
+}
 
     const goldHerb =
         data.channels[channelId].bosses.goldHerb;
@@ -1294,10 +1806,9 @@ if (interaction.customId === 'goldherb') {
         Date.now() < goldHerb.expiresAt
     ) {
 
-        return interaction.reply({
+        return interaction.editReply({
             content:
                 '❌ Gold Herb is already on cooldown.',
-            flags: 64
         });
     }
 
@@ -1308,11 +1819,45 @@ if (interaction.customId === 'goldherb') {
 
     await updatePanel(interaction.channel);
 
-    await interaction.reply({
-        content:
-            '✅ Gold Herb marked. Respawn timer starts.',
-        flags: 64
-    });
+    await interaction.editReply({
+    content:
+        '✅ Gold Herb marked. Respawn timer starts.'
+});
+
+    return;
+}
+
+if (interaction.customId === 'sealingchamber') {
+await interaction.deferReply({ flags: 64 });
+
+    const data = loadData();
+    const channelId = interaction.channel.id;
+
+    const sealingChamber =
+        data.channels[channelId].bosses.sealingChamber;
+
+    if (
+        sealingChamber.expiresAt &&
+        Date.now() < sealingChamber.expiresAt
+    ) {
+
+        return interaction.editReply({
+            content:
+                '❌ Sealing Chamber is already on cooldown.',
+        });
+    }
+
+    sealingChamber.expiresAt =
+        Date.now() + (31 * 60 * 1000);
+
+    await saveData(data);
+
+    await updatePanel(interaction.channel);
+
+    await interaction.editReply({
+    content:
+        '✅ Sealing Chamber marked. Respawn timer starts.'
+});
 
     return;
 }
@@ -1322,6 +1867,350 @@ if (interaction.customId === 'goldherb') {
 // Select Menu
 
 if (interaction.isStringSelectMenu()) {
+
+// MS 11 Swap
+
+if (interaction.customId === 'ms11_swap') {
+
+    const data = loadData();
+
+    const channelId =
+        interaction.channel.id;
+
+    const userId =
+        interaction.user.id;
+
+    const newChamber =
+        interaction.values[0];
+
+    const specialClaim =
+        data.channels[channelId]
+            ?.specialClaims?.[userId];
+
+    if (!specialClaim) {
+
+        return interaction.reply({
+            content:
+                '❌ No MS11 claim found.',
+            flags: 64
+        });
+    }
+
+    const oldChamber =
+        specialClaim.chamber;
+
+    if (oldChamber === newChamber) {
+
+        return interaction.reply({
+            content:
+                '❌ Already in that chamber.',
+            flags: 64
+        });
+    }
+
+    const oldList =
+        data.channels[channelId]
+            .specialChambers[
+                oldChamber
+            ].claims;
+
+    const claim =
+        oldList.find(
+            x => x.ownerId === userId
+        );
+
+    if (!claim) {
+
+        return interaction.reply({
+            content:
+                '❌ Claim record missing.',
+            flags: 64
+        });
+    }
+
+    data.channels[channelId]
+        .specialChambers[
+            oldChamber
+        ].claims =
+            oldList.filter(
+                x => x.ownerId !== userId
+            );
+
+    data.channels[channelId]
+        .specialChambers[
+            newChamber
+        ].claims.push(claim);
+
+    specialClaim.chamber =
+        newChamber;
+
+    if (specialClaim.claimPanelMessageId) {
+
+    try {
+
+        const panel =
+            await interaction.channel.messages.fetch(
+                specialClaim.claimPanelMessageId
+            );
+
+        await panel.edit({
+
+            content:
+`👤 ${interaction.user}
+
+🏠 Chamber: ${newChamber.toUpperCase()}
+🎟️ Tickets: ${claim.tickets}`,
+
+            components: [
+                new ActionRowBuilder().addComponents(
+
+                    new ButtonBuilder()
+                        .setCustomId('swapclaim')
+                        .setLabel('🔄 Swap Chamber')
+                        .setStyle(ButtonStyle.Primary),
+
+                    new ButtonBuilder()
+                        .setCustomId('endclaim')
+                        .setLabel('❌ End Claim')
+                        .setStyle(ButtonStyle.Danger)
+                )
+            ]
+        });
+
+    } catch (err) {
+
+        console.log(
+            '[MS11 PANEL EDIT FAILED]',
+            err.message
+        );
+    }
+}
+
+    await saveData(data);
+
+    await updateMS11Panel(
+        interaction.channel
+    );
+
+    return interaction.update({
+
+        content:
+`✅ Swapped to ${newChamber.toUpperCase()}`,
+
+        components: []
+    });
+}
+
+// MS 11 Menu
+
+   if (interaction.customId === 'ms11_chamber') {
+
+    const chamber =
+        interaction.values[0];
+
+    const ticketMenu =
+        new StringSelectMenuBuilder()
+
+        .setCustomId(
+            `ms11_ticket_${chamber}`
+        )
+
+        .setPlaceholder(
+            'Select Ticket Count'
+        )
+
+        .addOptions(
+
+            {
+                label: '1 Ticket',
+                value: '1'
+            },
+
+            {
+                label: '2 Tickets',
+                value: '2'
+            },
+
+            {
+                label: '3 Tickets',
+                value: '3'
+            },
+
+            {
+                label: '4 Tickets',
+                value: '4'
+            },
+
+            {
+                label: '5 Tickets',
+                value: '5'
+            }
+        );
+
+    const row =
+        new ActionRowBuilder()
+            .addComponents(ticketMenu);
+
+    return interaction.update({
+
+        content:
+            `Selected: ${chamber.toUpperCase()}\n\nSelect ticket count.`,
+
+        components: [row]
+    });
+}
+
+// MS 11 Ticket
+
+    if (interaction.customId.startsWith('ms11_ticket_')) {
+
+    const data = loadData();
+
+    const channelId =
+        interaction.channel.id;
+
+    const userId =
+        interaction.user.id;
+
+    const chamber =
+        interaction.customId.replace(
+            'ms11_ticket_',
+            ''
+        );
+
+    const tickets =
+        Number(
+            interaction.values[0]
+        );
+
+    if (
+        !data.channels[channelId]
+            .specialClaims
+    ) {
+
+        data.channels[channelId]
+            .specialClaims = {};
+    }
+
+    if (
+        data.channels[channelId]
+            .specialClaims[userId]
+    ) {
+
+        return interaction.reply({
+            content:
+                '❌ You already own a MS11 chamber.',
+            flags: 64
+        });
+    }
+
+    const selectedChamber =
+    data.channels[channelId]
+        .specialChambers[chamber];
+
+    selectedChamber.claims.push({
+
+    owner:
+        interaction.member.displayName,
+
+    ownerId:
+        userId,
+
+    tickets,
+
+    expiresAt:
+        Date.now() + (tickets * 30 * 60 * 1000),
+
+    claimPanelMessageId:
+        null
+});
+
+    data.channels[channelId]
+    .specialClaims[userId] = {
+
+    chamber,
+    tickets,
+
+    expiresAt:
+        Date.now() + (tickets * 30 * 60 * 1000)
+};
+
+    await saveData(data);
+
+await updateMS11Panel(
+    interaction.channel,
+    data
+);
+
+const userPanelRow =
+    new ActionRowBuilder()
+        .addComponents(
+
+            new ButtonBuilder()
+                .setCustomId(
+                    `claim_swap_${userId}`
+                )
+                .setLabel('🔄 Swap Chamber')
+                .setStyle(
+                    ButtonStyle.Primary
+                ),
+
+            new ButtonBuilder()
+                .setCustomId(
+                    `claim_end_${userId}`
+                )
+                .setLabel('❌ End Claim')
+                .setStyle(
+                    ButtonStyle.Danger
+                )
+        );
+
+const claimPanel =
+    await interaction.channel.send({
+
+        content:
+`👤 ${interaction.user}
+
+🏠 Chamber: ${chamber.toUpperCase()}
+🎟 Tickets: ${tickets}`,
+
+        components: [userPanelRow]
+    });
+
+const claimRecord =
+    selectedChamber.claims.find(
+        c => c.ownerId === userId
+    );
+
+if (claimRecord) {
+
+    claimRecord.claimPanelMessageId =
+        claimPanel.id;
+}
+
+data.channels[channelId]
+    .specialClaims[userId]
+    .claimPanelMessageId =
+    claimPanel.id;
+
+await saveData(data);
+
+console.log(
+    `[MS11 CLAIM] ${interaction.member.displayName} | ${chamber.toUpperCase()} | ${tickets} ticket(s)`
+);
+
+return interaction.update({
+
+    content:
+`✅ Claimed ${chamber.toUpperCase()}
+🎟 Tickets: ${tickets}`,
+
+    components: []
+});
+
+}
+
+// ADC 1
 
 if (interaction.customId.startsWith('tickets_')) {
 
@@ -1362,18 +2251,16 @@ if (interaction.customId.startsWith('tickets_')) {
     data.channels[channelId].adc[spot].tickets =
     tickets;
 
-// Clear reserve when claimed
-    data.channels[channelId].adc[spot].reserve = null;
-    data.channels[channelId].adc[spot].reserveId = null;
-    data.channels[channelId].adc[spot].reserveExpiresAt = null;
-
     const duration =
         tickets * 30 * 60 * 1000;
 
     data.channels[channelId].adc[spot].expiresAt =
         Date.now() + duration;
 
+    data.channels[channelId].userClaims ??= {};
+
     data.channels[channelId].userClaims[userId] = {
+
     type: `ADC ${spot.toUpperCase()}`,
     spot: spot,
     tickets: tickets,
@@ -1387,7 +2274,7 @@ if (interaction.customId.startsWith('tickets_')) {
 
     const claimPanel = await interaction.channel.send({
     content:
-`${interaction.user} currently owns ADC ${spot.toUpperCase()}.`,
+`${interaction.user} currently owns ADC I-I ${spot.toUpperCase()}.`,
     components: [
         new ActionRowBuilder().addComponents(
 
@@ -1414,12 +2301,134 @@ await saveData(data);
 
 await updatePanel(interaction.channel);
 
-await interaction.update({
-    content: '✅ Claim successful.',
-    components: []
-});
+try {
+
+    await interaction.update({
+        content: '✅ Claim successful.',
+        components: []
+    });
+
+} catch (err) {
+
+    console.log(
+        '[CLAIM] Interaction expired before update.'
+    );
+
+}
 
 return;
+
+}
+
+// ADC 2
+
+if (interaction.customId.startsWith('tickets2_')) {
+
+
+    const data = loadData();
+    const channelId = interaction.channel.id;
+    const userId = interaction.user.id;
+
+    const spot =
+       interaction.customId.replace('tickets2_', '');
+
+    const tickets =
+        parseInt(interaction.values[0]);
+
+    if (!data.channels[channelId]) {
+        return interaction.reply({
+            content: 'Panel not initialized.',
+            flags: 64
+        });
+    }
+
+ if (data.channels[channelId].adc2[spot].ownerId) {
+
+    return interaction.reply({
+    content:
+        `❌ ADC ${spot.toUpperCase()} is already occupied.`,
+        flags: 64
+});
+
+}
+
+    data.channels[channelId].adc2[spot].owner =
+    interaction.member.displayName;
+
+    data.channels[channelId].adc2[spot].ownerId =
+    userId;
+
+    data.channels[channelId].adc2[spot].tickets =
+    tickets;
+
+    const duration =
+        tickets * 30 * 60 * 1000;
+
+    data.channels[channelId].adc2[spot].expiresAt =
+        Date.now() + duration;
+
+    data.channels[channelId].userClaims ??= {};
+
+    data.channels[channelId].userClaims[userId] = {
+
+    type: `ADC I-II ${spot.toUpperCase()}`,
+    spot: spot,
+    tickets: tickets,
+    expiresAt: data.channels[channelId].adc2[spot].expiresAt,
+    chamberType: 'adc2',
+    claimPanelMessageId: null
+   
+ };
+
+    await saveData(data);
+
+    const claimPanel = await interaction.channel.send({
+    content:
+`${interaction.user} currently owns ADC I-II ${spot.toUpperCase()}.`,
+    components: [
+        new ActionRowBuilder().addComponents(
+
+            new ButtonBuilder()
+                .setCustomId(`claim_end_${userId}`)
+                .setLabel('❌ End Claim')
+                .setStyle(ButtonStyle.Danger),
+
+            new ButtonBuilder()
+                .setCustomId(`claim_swap_${userId}`)
+                .setLabel('🔄 Swap Claim')
+                .setStyle(ButtonStyle.Primary)
+        )
+    ]
+});
+
+    data.channels[channelId].userClaims[userId].claimPanelMessageId = claimPanel.id;
+
+await saveData(data);
+
+    console.log(
+`[CLAIM] ${interaction.member.displayName} claimed ADC I-II ${spot.toUpperCase()}`
+);
+
+await updatePanel(interaction.channel);
+
+try {
+
+    await interaction.update({
+        content: '✅ Claim successful.',
+        components: []
+    });
+
+} catch (err) {
+
+    console.log(
+        '[CLAIM] Interaction expired before update.'
+    );
+
+}
+
+return;
+
+}
 
 }
 
@@ -1429,44 +2438,64 @@ if (interaction.customId === 'swap_claimtype') {
     const channelId = interaction.channel.id;
     const userId = interaction.user.id;
 
+    if (!data.channels[channelId]) {
+
+        return interaction.reply({
+            content: '❌ Panel data missing.',
+            flags: 64
+        });
+
+    }
+
+    data.channels[channelId].userClaims ??= {};
+
     const claim =
-        data.channels[channelId].userClaims[userId];
+        data.channels[channelId]
+            .userClaims[userId];
+
+    if (!claim) {
+
+        return interaction.reply({
+            content: '❌ Claim data missing.',
+            flags: 64
+        });
+
+    }
 
     const selected =
-    interaction.values[0];
+        interaction.values[0];
 
     // ADC SWAP
     if (
-    claim.chamberType === 'adc' &&
-    selected === 'adc'
-) {
+    (
+        claim.chamberType === 'adc' ||
+        claim.chamberType === 'adc2' ||
+        claim.chamberType === 'boss'
+    ) &&
+    selected === 'adc1'
+) 
+    {
 
     const options = [];
 
-    if (
-        !data.channels[channelId].adc.left.ownerId &&
-        !data.channels[channelId].adc.left.reserveId
-    ) {
+    if (!data.channels[channelId].adc.left.ownerId)
+    {
         options.push({
             label: 'LEFT',
             value: 'left'
         });
     }
 
-    if (
-        !data.channels[channelId].adc.center.ownerId &&
-        !data.channels[channelId].adc.center.reserveId
-    ) {
+    if (!data.channels[channelId].adc.center.ownerId)
+    {
         options.push({
             label: 'CENTER',
             value: 'center'
         });
     }
 
-    if (
-        !data.channels[channelId].adc.right.ownerId &&
-        !data.channels[channelId].adc.right.reserveId
-    ) {
+    if (!data.channels[channelId].adc.right.ownerId)
+    {
         options.push({
             label: 'RIGHT',
             value: 'right'
@@ -1501,22 +2530,89 @@ if (interaction.customId === 'swap_claimtype') {
 
 }
 
+    if (
+    (
+        claim.chamberType === 'adc' ||
+        claim.chamberType === 'adc2' ||
+        claim.chamberType === 'boss'
+    ) &&
+    selected === 'adc2'
+) {
+
+    const options = [];
+
+    if (!data.channels[channelId].adc2.left.ownerId)
+        options.push({ label: 'LEFT', value: 'left' });
+
+    if (!data.channels[channelId].adc2.center.ownerId)
+        options.push({ label: 'CENTER', value: 'center' });
+
+    if (!data.channels[channelId].adc2.right.ownerId)
+        options.push({ label: 'RIGHT', value: 'right' });
+
+    if (!options.length) {
+
+        return interaction.reply({
+            content: '❌ No available ADC I-II spots.',
+            flags: 64
+        });
+
+    }
+
+    const adcMenu =
+        new StringSelectMenuBuilder()
+            .setCustomId('swap_adc2spot')
+            .setPlaceholder('Select ADC I-II Plate')
+            .addOptions(options);
+
+    const row =
+        new ActionRowBuilder()
+            .addComponents(adcMenu);
+
+    await interaction.update({
+        content: 'Select ADC I-II Plate',
+        components: [row]
+    });
+
+    return;
+}
+
+
  if (
     claim.chamberType === 'adc' &&
     selected === 'boss'
 ) {
+        const rotation =
+    data.channels[channelId]
+        .bossRotation;
 
-        const boss =
-            data.channels[channelId].bossRotation;
+let boss = null;
+let bossSlot = null;
 
-        if (boss.ownerId) {
+if (!rotation.slot1.ownerId) {
 
-            return interaction.reply({
-                content:
-                    '❌ Boss Rotation is already occupied.',
-                flags: 64
-            });
-        }
+    boss = rotation.slot1;
+    bossSlot = 'slot1';
+}
+else if (!rotation.slot2.ownerId) {
+
+    boss = rotation.slot2;
+    bossSlot = 'slot2';
+}
+else if (!rotation.slot3.ownerId) {
+
+    boss = rotation.slot3;
+    bossSlot = 'slot3';
+}
+
+if (!boss) {
+
+    return interaction.reply({
+        content:
+            '❌ Boss Rotation is full.',
+        flags: 64
+    });
+}
 
         const oldSpot = claim.spot;
 
@@ -1527,17 +2623,6 @@ if (interaction.customId === 'swap_claimtype') {
         adc.ownerId = null;
         adc.tickets = 0;
         adc.expiresAt = null;
-
-        if (adc.reserveId) {
-
-            adc.reserveExpiresAt =
-                Date.now() + (3 * 60 * 1000);
-
-            await sendAutoDelete(
-                interaction.channel,
-                `<@${adc.reserveId}> You have 3 minutes to claim ADC ${oldSpot.toUpperCase()}.`
-            );
-        }
 
         boss.owner =
             interaction.member.displayName;
@@ -1551,15 +2636,26 @@ if (interaction.customId === 'swap_claimtype') {
         boss.expiresAt =
             claim.expiresAt;
 
+        const previousType =
+               claim.type;
+
         claim.type =
             'Boss Rotation';
+        
 
         claim.chamberType =
-            'boss';
+    'boss';
 
-        delete claim.spot;
+claim.bossSlot =
+    bossSlot;
+
+delete claim.spot;
 
         await saveData(data);
+
+        console.log(
+`[SWAP] ${interaction.member.displayName} | ${previousType} -> Boss Rotation (${bossSlot.toUpperCase()})`
+);
 
         const panel =
             await interaction.channel.messages.fetch(
@@ -1583,35 +2679,30 @@ if (interaction.customId === 'swap_claimtype') {
 
   if (
     claim.chamberType === 'boss' &&
-    selected === 'adc'
-) {
+    selected === 'adc1'
+  ) 
+   {
 
     const options = [];
 
-    if (
-        !data.channels[channelId].adc.left.ownerId &&
-        !data.channels[channelId].adc.left.reserveId
-    ) {
+    if (!data.channels[channelId].adc.left.ownerId)
+    {
         options.push({
             label: 'LEFT',
             value: 'left'
         });
     }
 
-    if (
-        !data.channels[channelId].adc.center.ownerId &&
-        !data.channels[channelId].adc.center.reserveId
-    ) {
+    if (!data.channels[channelId].adc.center.ownerId)
+    {
         options.push({
             label: 'CENTER',
             value: 'center'
         });
     }
 
-    if (
-        !data.channels[channelId].adc.right.ownerId &&
-        !data.channels[channelId].adc.right.reserveId
-    ) {
+    if (!data.channels[channelId].adc.right.ownerId)
+    {
         options.push({
             label: 'RIGHT',
             value: 'right'
@@ -1644,147 +2735,239 @@ if (interaction.customId === 'swap_claimtype') {
     return;
 }
 
-}
-
-    if (interaction.customId === 'reserve_spot') {
-
-    const data = loadData();
-    const channelId = interaction.channel.id;
-
-    const userId = interaction.user.id;
-
-   const alreadyHasClaim =
+if (
+    claim.chamberType === 'adc2' &&
+    selected === 'boss'
+)
+{
+    const rotation =
     data.channels[channelId]
-        .userClaims?.[userId];
+        .bossRotation;
 
-if (alreadyHasClaim) {
+let boss = null;
+let bossSlot = null;
 
-    return interaction.reply({
-        content: '❌ You already have an active claim.',
-        flags: 64
-    });
+if (!rotation.slot1.ownerId) {
+
+    boss = rotation.slot1;
+    bossSlot = 'slot1';
+}
+else if (!rotation.slot2.ownerId) {
+
+    boss = rotation.slot2;
+    bossSlot = 'slot2';
+}
+else if (!rotation.slot3.ownerId) {
+
+    boss = rotation.slot3;
+    bossSlot = 'slot3';
 }
 
-const alreadyReserved =
-    Object.values(data.channels[channelId].adc)
-        .some(x => x.reserveId === userId);
-
-if (alreadyReserved) {
-
-    return interaction.reply({
-        content: '❌ You already have an active reserve.',
-        flags: 64
-    });
-}
-
-    const cooldown =
-        getCooldown(
-            data,
-            channelId,
-            userId
-        );
-
-    if (cooldown) {
-
-          return interaction.reply({
-               content:
-    `❌ You are on cooldown (${formatCooldown(cooldown - Date.now())})`,
-            flags: 64
-        });
-    }
-
-    const spot = interaction.values[0];
-
-    const adc =
-        data.channels[channelId].adc[spot];
-
-    const remaining =
-    adc.expiresAt
-        ? adc.expiresAt - Date.now()
-        : 0;
-
-    if (remaining > (3 * 60 * 1000)) {
+if (!boss) {
 
     return interaction.reply({
         content:
-            '❌ Reserve is only available when 3 minutes or less remaining.',
+            '❌ Boss Rotation is full.',
         flags: 64
     });
 }
 
-    if (!adc.ownerId) {
+    const oldSpot = claim.spot;
 
-        return interaction.reply({
-            content:
-                `❌ ADC ${spot.toUpperCase()} is not occupied.`,
-            flags: 64
-        });
-    }
+    const adc =
+        data.channels[channelId].adc2[oldSpot];
 
-    if (adc.reserveId) {
+    adc.owner = null;
+    adc.ownerId = null;
+    adc.tickets = 0;
+    adc.expiresAt = null;
 
-        return interaction.reply({
-            content:
-                `❌ ADC ${spot.toUpperCase()} already has a reserve.`,
-            flags: 64
-        });
-    }
-
-    adc.reserve =
+    boss.owner =
         interaction.member.displayName;
 
-    adc.reserveId =
-        interaction.user.id;
+    boss.ownerId =
+        userId;
+
+    boss.tickets =
+        claim.tickets;
+
+    boss.expiresAt =
+        claim.expiresAt;
+
+    const previousType =
+    claim.type;
+
+    claim.type =
+        'Boss Rotation';
+
+    claim.chamberType =
+        'boss';
+
+    claim.bossSlot =
+    bossSlot;
+
+    delete claim.spot;
 
     await saveData(data);
+
+console.log(
+    `[SWAP] ${interaction.member.displayName} | ${previousType} -> Boss Rotation (${bossSlot.toUpperCase()})`
+);
+
+    if (claim.claimPanelMessageId) {
+
+    try {
+
+        const panelMessage =
+            await interaction.channel.messages.fetch(
+                claim.claimPanelMessageId
+            );
+
+        await panelMessage.edit({
+            content:
+`${interaction.user} currently owns Boss Rotation.`
+        });
+
+    } catch (err) {
+
+        console.log(
+            '[SWAP PANEL UPDATE FAILED]',
+            err
+        );
+    }
+}
 
     await updatePanel(interaction.channel);
 
     await interaction.update({
-    content: `✅ Reserved ADC ${spot.toUpperCase()}.`,
-    components: []
+        content: '✅ Swap successful.',
+        components: []
+    });
+
+    return;
+}
+
+    if (
+    claim.chamberType === 'boss' &&
+    selected === 'adc2'
+)
+{
+
+    const options = [];
+
+    if (!data.channels[channelId].adc2.left.ownerId)
+        options.push({ label: 'LEFT', value: 'left' });
+
+    if (!data.channels[channelId].adc2.center.ownerId)
+        options.push({ label: 'CENTER', value: 'center' });
+
+    if (!data.channels[channelId].adc2.right.ownerId)
+        options.push({ label: 'RIGHT', value: 'right' });
+
+    if (!options.length) {
+
+        return interaction.reply({
+            content: '❌ No available ADC I-II spots.',
+            flags: 64
+        });
+
+    }
+
+    const adcMenu =
+        new StringSelectMenuBuilder()
+            .setCustomId('swap_adc2spot')
+            .setPlaceholder('Select ADC I-II Plate')
+            .addOptions(options);
+
+    const row =
+        new ActionRowBuilder()
+            .addComponents(adcMenu);
+
+    await interaction.update({
+        content: 'Select ADC I-II Plate',
+        components: [row]
+    });
+
+    return;
+}
+
+return interaction.reply({
+    content: `❌ Missing swap handler (${claim.chamberType} → ${selected})`,
+    flags: 64
 });
 
-return;
 }
 
     if (interaction.customId === 'claimtype') {
 
         const choice = interaction.values[0];
 
-        if (choice === 'adc') {
+        if (choice === 'adc1') {
 
-            const adcMenu =
-                new StringSelectMenuBuilder()
-                .setCustomId('adcspot')
-                .setPlaceholder('Select ADC Plate')
-                .addOptions(
-                    {
-                        label: 'LEFT',
-                        value: 'left'
-                    },
-                    {
-                        label: 'CENTER',
-                        value: 'center'
-                    },
-                    {
-                        label: 'RIGHT',
-                        value: 'right'
-                    }
-                );
+    const adcMenu =
+        new StringSelectMenuBuilder()
+        .setCustomId('adcspot1')
+        .setPlaceholder('Select ADC I-I Plate')
+        .addOptions(
+            {
+                label: 'LEFT',
+                value: 'left'
+            },
+            {
+                label: 'CENTER',
+                value: 'center'
+            },
+            {
+                label: 'RIGHT',
+                value: 'right'
+            }
+        );
 
-            const row =
-                new ActionRowBuilder()
-                .addComponents(adcMenu);
+    const row =
+        new ActionRowBuilder()
+        .addComponents(adcMenu);
 
-            await interaction.reply({
-    content: 'Select ADC Plate',
-    components: [row],
-    flags: 64
+    await interaction.update({
+    content: 'Select ADC I-I Plate',
+    components: [row]
 });
 
-            return;
-        }
+    return;
+}
+
+if (choice === 'adc2') {
+
+    const adcMenu =
+        new StringSelectMenuBuilder()
+        .setCustomId('adcspot2')
+        .setPlaceholder('Select ADC I-II Plate')
+        .addOptions(
+            {
+                label: 'LEFT',
+                value: 'left'
+            },
+            {
+                label: 'CENTER',
+                value: 'center'
+            },
+            {
+                label: 'RIGHT',
+                value: 'right'
+            }
+        );
+
+    const row =
+        new ActionRowBuilder()
+        .addComponents(adcMenu);
+
+    await interaction.update({
+    content: 'Select ADC I-II Plate',
+    components: [row]
+});
+
+    return;
+
+ }
 
         if (choice === 'boss') {
 
@@ -1805,10 +2988,9 @@ return;
         new ActionRowBuilder()
         .addComponents(ticketMenu);
 
-    await interaction.reply({
+    await interaction.update({
     content: 'Select Ticket Count',
-    components: [row],
-    flags: 64
+    components: [row]
 });
 
     return;
@@ -1843,21 +3025,6 @@ return;
     const adc =
     data.channels[channelId].adc[spot];
 
-if (
-    adc.reserveId &&
-    adc.reserveExpiresAt &&
-    Date.now() < adc.reserveExpiresAt &&
-    adc.reserveId !== interaction.user.id
-) {
-
-    await interaction.editReply({
-        content:
-            `❌ ADC ${spot.toUpperCase()} is reserved for another user.`
-    });
-
-    return;
-}
-
     const userId = interaction.user.id;
 
 const claim =
@@ -1872,6 +3039,13 @@ if (!claim) {
     return;
 }
 
+const previousType =
+    claim.type;
+
+console.log(
+`[SWAP] ${interaction.member.displayName} | ${previousType} -> ADC I-I ${spot.toUpperCase()}`
+);
+
 if (claim.chamberType === 'adc') {
 
     const oldSpot = claim.spot;
@@ -1881,43 +3055,47 @@ if (claim.chamberType === 'adc') {
     data.channels[channelId].adc[oldSpot].tickets = 0;
     data.channels[channelId].adc[oldSpot].expiresAt = null;
 
-    if (
-        data.channels[channelId].adc[oldSpot].reserveId
-    ) {
+}
 
-        data.channels[channelId].adc[oldSpot].reserveExpiresAt =
-            Date.now() + (3 * 60 * 1000);
+else if (claim.chamberType === 'adc2') {
 
-        await sendAutoDelete(
-            interaction.channel,
-            `<@${data.channels[channelId].adc[oldSpot].reserveId}> You have 3 minutes to claim ADC ${oldSpot.toUpperCase()}.`
-        );
-    }
+    const oldSpot = claim.spot;
+
+    data.channels[channelId].adc2[oldSpot].owner = null;
+    data.channels[channelId].adc2[oldSpot].ownerId = null;
+    data.channels[channelId].adc2[oldSpot].tickets = 0;
+    data.channels[channelId].adc2[oldSpot].expiresAt = null;
 
 }
-else {
+
+else if (claim.chamberType === 'boss') {
 
     const boss =
-        data.channels[channelId].bossRotation;
+        data.channels[channelId]
+            .bossRotation[
+                claim.bossSlot
+            ];
 
-    boss.owner = null;
-    boss.ownerId = null;
-    boss.tickets = 0;
-    boss.expiresAt = null;
+    if (boss) {
+
+        boss.owner = null;
+        boss.ownerId = null;
+        boss.tickets = 0;
+        boss.expiresAt = null;
+    }
+
+    delete claim.bossSlot;
 }
 
 data.channels[channelId].adc[spot] = {
     owner: interaction.member.displayName,
     ownerId: userId,
     tickets: claim.tickets,
-    reserve: null,
-    reserveId: null,
-    reserveExpiresAt: null,
     expiresAt: claim.expiresAt
 };
 
 claim.spot = spot;
-claim.type = `ADC ${spot.toUpperCase()}`;
+claim.type = `ADC I-I ${spot.toUpperCase()}`
 claim.chamberType = 'adc';
 
 await addCooldown(
@@ -1926,8 +3104,11 @@ await addCooldown(
     userId
 );
 
+const fromLocation =
+    claim.type;
+
 console.log(
-`[SWAP] ${interaction.member.displayName} Swap successful. ${spot.toUpperCase()}`
+`[SWAP] ${interaction.member.displayName} | ${fromLocation} -> ADC I-I ${spot.toUpperCase()}`
 );
 
 await saveData(data);
@@ -1945,13 +3126,148 @@ if (panelId) {
 
         await panel.edit({
             content:
-`${interaction.user} currently owns ADC ${spot.toUpperCase()}.`
+`${interaction.user} currently owns ADC I-I ${spot.toUpperCase()}.`
         });
 
     } catch (err) {
         console.log(
             '[SWAP] Failed to update claim panel.'
         );
+    }
+}
+
+await updatePanel(interaction.channel);
+
+await interaction.editReply({
+    content: '✅ Swap successful.',
+    components: []
+});
+
+return;
+
+}
+
+if (interaction.customId === 'swap_adc2spot') {
+
+await interaction.update({
+    content: '⏳ Swapping...',
+    components: []
+});
+
+    const spot = interaction.values[0];
+
+    const data = loadData();
+    const channelId = interaction.channel.id;
+    const userId = interaction.user.id;
+
+    const claim =
+        data.channels[channelId].userClaims[userId];
+
+    if (!claim) {
+
+        await interaction.followUp({
+    content: '❌ No active claim found.',
+    ephemeral: true
+});
+
+return;
+
+    }
+
+    const previousType =
+    claim.type;
+
+    if (data.channels[channelId].adc2[spot].ownerId) {
+
+        await interaction.followUp({
+    content: '❌ Spot already occupied.',
+    ephemeral: true
+});
+
+return;
+
+    }
+
+if (claim.chamberType === 'adc') {
+
+    const oldSpot = claim.spot;
+
+    data.channels[channelId].adc[oldSpot].owner = null;
+    data.channels[channelId].adc[oldSpot].ownerId = null;
+    data.channels[channelId].adc[oldSpot].tickets = 0;
+    data.channels[channelId].adc[oldSpot].expiresAt = null;
+
+}
+
+else if (claim.chamberType === 'adc2') {
+
+    const oldSpot = claim.spot;
+
+    data.channels[channelId].adc2[oldSpot].owner = null;
+    data.channels[channelId].adc2[oldSpot].ownerId = null;
+    data.channels[channelId].adc2[oldSpot].tickets = 0;
+    data.channels[channelId].adc2[oldSpot].expiresAt = null;
+
+}
+
+else if (claim.chamberType === 'boss') {
+
+    const boss =
+        data.channels[channelId]
+            .bossRotation[
+                claim.bossSlot
+            ];
+
+    if (boss) {
+
+        boss.owner = null;
+        boss.ownerId = null;
+        boss.tickets = 0;
+        boss.expiresAt = null;
+    }
+
+    delete claim.bossSlot;
+}
+
+    data.channels[channelId].adc2[spot] = {
+        owner: interaction.member.displayName,
+        ownerId: userId,
+        tickets: claim.tickets,
+        expiresAt: claim.expiresAt
+    };
+
+    claim.spot = spot;
+    claim.type = `ADC I-II ${spot.toUpperCase()}`;
+    claim.chamberType = 'adc2';
+
+    await saveData(data);
+
+    console.log(
+`[SWAP] ${interaction.member.displayName} | ${previousType} -> ADC I-II ${spot.toUpperCase()}`
+);
+
+const panelId = claim.claimPanelMessageId;
+
+if (panelId) {
+
+    try {
+
+        const panel =
+            await interaction.channel.messages.fetch(
+                panelId
+            );
+
+        await panel.edit({
+            content:
+`${interaction.user} currently owns ADC I-II ${spot.toUpperCase()}.`
+        });
+
+    } catch (err) {
+
+        console.log(
+            '[SWAP] Failed to update claim panel.'
+        );
+
     }
 }
 
@@ -1993,38 +3309,52 @@ return;
     return;
 }
 
-    const hasReserve =
-      Object.values(
-    data.channels[channelId].adc
-).some(adc =>
-    adc.reserveId === userId
-);
+    const tickets =
+        parseInt(interaction.values[0]);
 
-    if (hasReserve) {
+    const rotation =
+    data.channels[channelId].bossRotation;
+
+    const alreadyOwnsBoss =
+    Object.values(rotation)
+        .some(slot =>
+            slot?.ownerId === userId
+        );
+
+if (alreadyOwnsBoss) {
 
     await interaction.editReply({
         content:
-    '❌ You cannot claim Boss Rotation while holding an ADC reserve.'
+            '❌ You already own Boss Rotation.'
     });
 
     return;
 }
 
-    const tickets =
-        parseInt(interaction.values[0]);
+let boss = null;
+let bossSlot = null;
 
-    const boss =
-        data.channels[channelId].bossRotation;
+if (!rotation.slot1.ownerId) {
+    boss = rotation.slot1;
+    bossSlot = 'slot1';
+}
+else if (!rotation.slot2.ownerId) {
+    boss = rotation.slot2;
+    bossSlot = 'slot2';
+}
+else if (!rotation.slot3.ownerId) {
+    boss = rotation.slot3;
+    bossSlot = 'slot3';
+}
 
-    if (boss.ownerId) {
+if (!boss) {
 
-        await interaction.editReply({
-            content:
-                '❌ Boss Rotation is already occupied.'
-        });
-
-        return;
-    }
+    return interaction.reply({
+        content:
+            '❌ Boss Rotation & Mining/Gathering is full.',
+        flags: 64
+    });
+}
 
     const duration =
         tickets * 30 * 60 * 1000;
@@ -2042,12 +3372,13 @@ return;
         Date.now() + duration;
 
     data.channels[channelId].userClaims[userId] = {
-        type: 'Boss Rotation',
-        tickets: tickets,
-        expiresAt: boss.expiresAt,
-        chamberType: 'boss',
-        claimPanelMessageId: null
-    };
+    type: 'Boss Rotation',
+    tickets: tickets,
+    expiresAt: boss.expiresAt,
+    chamberType: 'boss',
+    bossSlot: bossSlot,
+    claimPanelMessageId: null
+};
 
     await saveData(data);
 
@@ -2147,9 +3478,13 @@ return;
 
     if (claim.chamberType === 'boss') {
 
-        const boss =
-            data.channels[channelId]
-                .bossRotation;
+    const boss =
+        data.channels[channelId]
+            .bossRotation[
+                claim.bossSlot
+            ];
+
+    if (boss) {
 
         boss.tickets =
             claim.tickets;
@@ -2157,19 +3492,37 @@ return;
         boss.expiresAt =
             claim.expiresAt;
     }
+}
 
     if (claim.chamberType === 'adc') {
 
-        const adc =
-            data.channels[channelId]
-                .adc[claim.spot];
+    const adc =
+        data.channels[channelId]
+            .adc[
+                claim.spot.replace('adc_', '')
+            ];
 
-        adc.tickets =
-            claim.tickets;
+    adc.tickets =
+        claim.tickets;
 
-        adc.expiresAt =
-            claim.expiresAt;
-    }
+    adc.expiresAt =
+        claim.expiresAt;
+}
+
+    if (claim.chamberType === 'adc2') {
+
+    const adc =
+        data.channels[channelId]
+            .adc2[
+                claim.spot.replace('adc2_', '')
+            ];
+
+    adc.tickets =
+        claim.tickets;
+
+    adc.expiresAt =
+        claim.expiresAt;
+}
 
     await saveData(data);
 
@@ -2188,7 +3541,7 @@ return;
 
 // ADC Handler
 
-    if (interaction.customId === 'adcspot') {
+    if (interaction.customId === 'adcspot1') {
 
     const data = loadData();
     const channelId = interaction.channel.id;
@@ -2197,15 +3550,6 @@ return;
 
     const adc =
     data.channels[channelId].adc[spot];
-
-    if (adc.reserveId === interaction.user.id) {
-
-    return interaction.reply({
-        content: `❌ You already reserved ADC ${spot.toUpperCase()}.`,
-        flags: 64
-    });
-
-}
 
     const existingClaim =
     data.channels[channelId]
@@ -2224,20 +3568,6 @@ if (existingClaim) {
 
         return interaction.reply({
             content: `❌ ADC ${spot.toUpperCase()} is already occupied.`,
-            flags: 64
-        });
-    }
-
-    if (
-        adc.reserveId &&
-        adc.reserveExpiresAt &&
-        Date.now() < adc.reserveExpiresAt &&
-        adc.reserveId !== interaction.user.id
-    ) {
-
-        return interaction.reply({
-            content:
-                `❌ ADC ${spot.toUpperCase()} is reserved for another user.`,
             flags: 64
         });
     }
@@ -2267,24 +3597,88 @@ if (existingClaim) {
     return;
   }
 
-    return;
 
-}
-
-if (!interaction.isChatInputCommand()) return;
+ if (interaction.customId === 'adcspot2') {
 
     const data = loadData();
     const channelId = interaction.channel.id;
 
-if (interaction.commandName === 'setup') {
+    const spot = interaction.values[0];
 
-if (data.channels[channelId]) {
+    const adc =
+    data.channels[channelId].adc2[spot];
+
+    const existingClaim =
+    data.channels[channelId]
+        ?.userClaims?.[interaction.user.id];
+
+if (existingClaim) {
 
     return interaction.reply({
         content:
-'❌ A panel already exists in this channel.',
+            '❌ You already own a chamber.',
         flags: 64
     });
+}
+
+    if (adc.ownerId) {
+
+        return interaction.reply({
+            content: `❌ ADC ${spot.toUpperCase()} is already occupied.`,
+            flags: 64
+        });
+    }
+
+    const ticketMenu =
+        new StringSelectMenuBuilder()
+        .setCustomId(`tickets2_${spot}`)
+        .setPlaceholder('Select Ticket Count')
+        .addOptions(
+        { label: '1 Ticket (30 mins)', value: '1' },
+        { label: '2 Tickets (1 hr)', value: '2' },
+        { label: '3 Tickets (1 hr 30 mins)', value: '3' },
+        { label: '4 Tickets (2 hrs)', value: '4' },
+        { label: '5 Tickets (2 hrs 30 mins)', value: '5' },
+        { label: '6 Tickets (3 hrs)', value: '6' }
+    );
+
+    const row =
+        new ActionRowBuilder()
+        .addComponents(ticketMenu);
+
+    await interaction.update({
+    content: `ADC I-II Plate Selected: ${spot.toUpperCase()}`,
+    components: [row]
+});
+
+    return;
+  }
+
+
+if (!interaction.isChatInputCommand()) return;
+
+const data = loadData();
+const channelId = interaction.channel.id;
+
+if (interaction.commandName === 'setup') {
+
+  await interaction.deferReply({ ephemeral: true });
+
+const data = loadData();
+const channelId = interaction.channel.id;
+
+const existing = data.channels[channelId];
+
+if (existing?.panelMessageId) {
+    try {
+        const channel = await interaction.channel.messages.fetch(existing.panelMessageId);
+        if (channel) {
+            return interaction.reply({
+                content: "❌ Panel already exists.",
+                flags: 64
+            });
+        }
+    } catch {}
 }
 
 data.channels[channelId] =
@@ -2293,68 +3687,7 @@ data.channels[channelId] =
 const embed = new EmbedBuilder()
 .setColor(0x57F287)
 .setTitle('🐸 青蛙・341')
-.setDescription('Claim a chamber using the button below.')
-
-.addFields(
-{
-    name: 'ㅤADC STATUS',
-    value: '🚦 0/3 Occupied\n\u200B',
-    inline: false
-},
-
-{
-    name: '🟢 LEFT',
-    value:
-`Status: FREE
-👤 None
-🎟 0
-⏰ --:--:--
-
-📌 None`,
-    inline: true
-},
-
-{
-    name: '🟢 CENTER',
-    value:
-`Status: FREE
-👤 None
-🎟 0
-⏰ --:--:--
-
-📌 None`,
-    inline: true
-},
-
-{
-    name: '🟢 RIGHT',
-    value:
-`Status: FREE
-👤 None
-🎟 0
-⏰ --:--:--
-
-📌 None`,
-    inline: true
-},
-
-{
-    name: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🟢 BOSS ROTATION',
-    value:
-`👤: Free to Claim
- ⏰: --:--:--
-
-🟢 Leader I - Alive
-🟢 Leader II - Alive
-🟢 Leader III - Alive
-🟢 Gold Ore - Alive
-🟢 Gold Herb - Alive
-
-*⏱️ Panel updates every 15 seconds.*`,
-    inline: false
-}
-
-);
+.setDescription('Loading panel...');
 
 // BUTTONS
 
@@ -2365,11 +3698,6 @@ const row1 = new ActionRowBuilder()
         .setCustomId('claim')
         .setLabel('⚔ Claim')
         .setStyle(ButtonStyle.Success),
-
-    new ButtonBuilder()
-        .setCustomId('reserve')
-        .setLabel('📌 Reserve')
-        .setStyle(ButtonStyle.Secondary),
 
     new ButtonBuilder()
         .setCustomId('extend')
@@ -2409,6 +3737,11 @@ new ButtonBuilder()
 new ButtonBuilder()
     .setCustomId('goldherb')
     .setLabel('🌿 Gold Herb')
+    .setStyle(ButtonStyle.Success),
+
+new ButtonBuilder()
+    .setCustomId('sealingchamber')
+    .setLabel('🔒 Sealing Chamber')
     .setStyle(ButtonStyle.Success)
 );
 
@@ -2422,17 +3755,90 @@ data.channels[channelId].panelMessageId = panelMessage.id;
 
 await saveData(data);
 
+await updatePanel(interaction.channel);
+
 console.log(
     '[SETUP]',
     interaction.replied,
     interaction.deferred
 );
 
-    return await interaction.reply({
-        content: 'Panel created.',
-        flags: 64
-    });
+    return await interaction.editReply({
+    content: 'Panel created.'
+});
 }
+
+// MS11 Panel
+
+if (interaction.commandName === 'setupms11') {
+
+  await interaction.deferReply({ flags: 64 });
+
+const data = loadData();
+const channelId = interaction.channel.id;
+
+const existing = data.channels[channelId];
+
+if (existing?.ms11PanelMessageId) {
+    try {
+        const channel = await interaction.channel.messages.fetch(
+    existing.ms11PanelMessageId
+);
+        if (channel) {
+            return interaction.reply({
+                content: "❌ Panel already exists.",
+                flags: 64
+            });
+        }
+    } catch {}
+}
+
+if (!data.channels[channelId]) {
+
+    data.channels[channelId] =
+        defaultServerData();
+
+}
+
+const embed = new EmbedBuilder()
+.setColor(0x57F287)
+.setTitle('🐸 青蛙・341 MS11')
+.setDescription('Loading MS11 panel...');
+
+// BUTTONS
+
+const row1 = new ActionRowBuilder()
+.addComponents(
+
+    new ButtonBuilder()
+        .setCustomId('ms11_claim')
+        .setLabel('⚔ Claim Chamber')
+        .setStyle(ButtonStyle.Success)
+);
+
+const panelMessage = await interaction.channel.send({
+    embeds: [embed],
+    components: [row1]
+});
+
+data.channels[channelId].ms11PanelMessageId =
+    panelMessage.id;
+
+await saveData(data);
+
+await updateMS11Panel(interaction.channel);
+
+console.log(
+    '[SETUP]',
+    interaction.replied,
+    interaction.deferred
+);
+
+    return await interaction.editReply({
+    content: 'Panel created.'
+});
+}
+
 
     if (interaction.commandName === 'removepanel') {
 
@@ -2458,7 +3864,8 @@ if (panelId) {
     }
 }
 
-delete data.channels[channelId];
+data.channels[channelId].panelMessageId =
+    null;
 
 await saveData(data);
 
@@ -2489,13 +3896,19 @@ if (interaction.commandName === 'removecd') {
 if (interaction.commandName === 'forcereset') {
 
     const panelId =
-        data.channels[channelId].panelMessageId;
+    data.channels[channelId].panelMessageId;
 
-    data.channels[channelId] =
-        defaultServerData();
+const ms11PanelId =
+    data.channels[channelId].ms11PanelMessageId;
 
-    data.channels[channelId].panelMessageId =
-        panelId;
+data.channels[channelId] =
+    defaultServerData();
+
+data.channels[channelId].panelMessageId =
+    panelId;
+
+data.channels[channelId].ms11PanelMessageId =
+    ms11PanelId;
 
     await saveData(data);
 
@@ -2513,59 +3926,30 @@ if (interaction.commandName === 'reset') {
     const target =
         interaction.options.getString('target');
 
-    if (target === 'boss') {
+   if (target.startsWith('boss_')) {
 
-        const boss =
-            data.channels[channelId].bossRotation;
+    const slotName =
+        target.replace('boss_', '');
 
-        if (boss.ownerId) {
+    const boss =
+        data.channels[channelId]
+            .bossRotation?.[slotName];
 
-            const claim =
-                data.channels[channelId]
-                .userClaims[boss.ownerId];
-
-            if (claim?.claimPanelMessageId) {
-
-                try {
-
-                    const msg =
-                        await interaction.channel.messages.fetch(
-                            claim.claimPanelMessageId
-                        );
-
-                    await msg.delete();
-
-                } catch {}
-            }
-
-            delete data.channels[channelId]
-                .userClaims[boss.ownerId];
-        }
-
-        boss.owner = null;
-        boss.ownerId = null;
-        boss.tickets = 0;
-        boss.expiresAt = null;
-
-        await saveData(data);
-
-        await updatePanel(interaction.channel);
+    if (!boss) {
 
         return interaction.reply({
-            content:
-                '✅ Boss Rotation reset.',
+            content: '❌ Invalid boss slot.',
             flags: 64
         });
     }
 
-    const adc =
-        data.channels[channelId].adc[target];
-
-    if (adc.ownerId) {
+    if (boss.ownerId) {
 
         const claim =
             data.channels[channelId]
-            .userClaims[adc.ownerId];
+                ?.userClaims?.[
+                    boss.ownerId
+                ];
 
         if (claim?.claimPanelMessageId) {
 
@@ -2582,16 +3966,15 @@ if (interaction.commandName === 'reset') {
         }
 
         delete data.channels[channelId]
-            .userClaims[adc.ownerId];
+            ?.userClaims?.[
+                boss.ownerId
+            ];
     }
 
-    adc.owner = null;
-    adc.ownerId = null;
-    adc.tickets = 0;
-    adc.expiresAt = null;
-    adc.reserve = null;
-    adc.reserveId = null;
-    adc.reserveExpiresAt = null;
+    boss.owner = null;
+    boss.ownerId = null;
+    boss.tickets = 0;
+    boss.expiresAt = null;
 
     await saveData(data);
 
@@ -2599,9 +3982,75 @@ if (interaction.commandName === 'reset') {
 
     return interaction.reply({
         content:
-            `✅ ADC ${target.toUpperCase()} reset.`,
+            `✅ ${slotName.toUpperCase()} reset.`,
         flags: 64
     });
+}
+
+    let adc;
+
+ console.log(
+    Object.keys(data.channels[channelId].adc2)
+);
+
+if (target.startsWith('adc2')) {
+
+    const spot =
+        target.replace('adc2', '');
+
+    adc =
+        data.channels[channelId].adc2[spot];
+
+} else {
+
+    const spot =
+        target.replace('adc', '');
+
+    adc =
+        data.channels[channelId].adc[spot];
+}
+
+console.log('target =', target);
+console.log('adc =', adc);
+
+if (adc.ownerId) {
+
+    const claim =
+        data.channels[channelId]
+        ?.userClaims?.[adc.ownerId];
+
+    if (claim?.claimPanelMessageId) {
+
+        try {
+
+            const msg =
+                await interaction.channel.messages.fetch(
+                    claim.claimPanelMessageId
+                );
+
+            await msg.delete();
+
+        } catch {}
+    }
+
+    delete data.channels[channelId]
+        .userClaims[adc.ownerId];
+}
+
+adc.owner = null;
+adc.ownerId = null;
+adc.tickets = 0;
+adc.expiresAt = null;
+
+await saveData(data);
+
+await updatePanel(interaction.channel);
+
+return interaction.reply({
+    content: `✅ ${target.toUpperCase()} reset.`,
+    flags: 64
+});
+
 }
 
 if (interaction.commandName === 'addadc') {
@@ -2623,10 +4072,17 @@ if (interaction.commandName === 'addadc') {
     const tickets =
         interaction.options.getInteger('tickets');
 
-    const name =
-        discordUser
-            ? discordUser.username
-            : manualName;
+const member =
+    discordUser
+        ? await interaction.guild.members.fetch(
+            discordUser.id
+        ).catch(() => null)
+        : null;
+
+const name =
+    member?.displayName ||
+    discordUser?.username ||
+    manualName;
 
     if (!name) {
 
@@ -2637,8 +4093,31 @@ if (interaction.commandName === 'addadc') {
         });
     }
 
-    const adc =
-        data.channels[channelId].adc[spot];
+    let adc;
+let chamberType;
+
+if (spot.startsWith('adc2_')) {
+
+    const actualSpot =
+        spot.replace('adc2_', '');
+
+    adc =
+        data.channels[channelId]
+            .adc2[actualSpot];
+
+    chamberType = 'adc2';
+
+} else {
+
+    const actualSpot =
+        spot.replace('adc_', '');
+
+    adc =
+        data.channels[channelId]
+            .adc[actualSpot];
+
+    chamberType = 'adc';
+}
 
     if (adc.ownerId) {
 
@@ -2662,18 +4141,57 @@ if (interaction.commandName === 'addadc') {
         Date.now() +
         (tickets * 30 * 60 * 1000);
 
-    if (discordUser) {
+ if (discordUser) {
+
+    data.channels[channelId].userClaims ??= {};
+
+    const claimType =
+        chamberType === 'adc2'
+            ? `ADC I-II ${spot.replace('adc2_', '').toUpperCase()}`
+            : `ADC I-I ${spot.replace('adc_', '').toUpperCase()}`;
 
     data.channels[channelId]
         .userClaims[discordUser.id] = {
 
-        type: `ADC ${spot.toUpperCase()}`,
-        spot,
+        type: claimType,
+
+        spot:
+            chamberType === 'adc2'
+                ? spot.replace('adc2_', '')
+                : spot.replace('adc_', ''),
+
         tickets,
         expiresAt: adc.expiresAt,
-        chamberType: 'adc',
+        chamberType,
         claimPanelMessageId: null
     };
+
+    const claimPanel =
+        await interaction.channel.send({
+
+            content:
+`${discordUser} currently owns ${claimType}.`,
+
+            components: [
+                new ActionRowBuilder().addComponents(
+
+                    new ButtonBuilder()
+                        .setCustomId(`claim_end_${discordUser.id}`)
+                        .setLabel('❌ End Claim')
+                        .setStyle(ButtonStyle.Danger),
+
+                    new ButtonBuilder()
+                        .setCustomId(`claim_swap_${discordUser.id}`)
+                        .setLabel('🔄 Swap Claim')
+                        .setStyle(ButtonStyle.Primary)
+                )
+            ]
+        });
+
+    data.channels[channelId]
+        .userClaims[discordUser.id]
+        .claimPanelMessageId =
+            claimPanel.id;
 }
 
     await saveData(data);
@@ -2697,12 +4215,43 @@ if (interaction.commandName === 'removeclaim') {
     const type =
         interaction.options.getString('type');
 
-    if (type === 'boss') {
+if (type.startsWith('boss_')) {
+
+    const slotName =
+        type.replace('boss_', '');
 
     const boss =
-        data.channels[channelId].bossRotation;
+        data.channels[channelId]
+            .bossRotation?.[slotName];
 
-    const ownerId = boss.ownerId;
+    if (!boss) {
+
+        return interaction.reply({
+            content: '❌ Invalid boss slot.',
+            flags: 64
+        });
+    }
+
+    const ownerId =
+        boss.ownerId;
+
+    const claim =
+        data.channels[channelId]
+            ?.userClaims?.[ownerId];
+
+    if (claim?.claimPanelMessageId) {
+
+        try {
+
+            const msg =
+                await interaction.channel.messages.fetch(
+                    claim.claimPanelMessageId
+                );
+
+            await msg.delete();
+
+        } catch {}
+    }
 
     if (
         ownerId &&
@@ -2724,16 +4273,50 @@ if (interaction.commandName === 'removeclaim') {
 
     return interaction.reply({
         content:
-            '✅ Boss Rotation cleared.',
+            `✅ ${slotName.toUpperCase()} cleared.`,
         flags: 64
     });
 }
 
-    const adc =
-        data.channels[channelId].adc[type];
+    let adc;
+
+if (type.startsWith('adc2_')) {
+
+    adc =
+        data.channels[channelId]
+            .adc2[
+                type.replace('adc2_', '')
+            ];
+
+} else {
+
+    adc =
+        data.channels[channelId]
+            .adc[
+                type.replace('adc_', '')
+            ];
+}
 
 const ownerId =
-        adc.ownerId;
+    adc.ownerId;
+
+const claim =
+    data.channels[channelId]
+        ?.userClaims?.[ownerId];
+
+if (claim?.claimPanelMessageId) {
+
+    try {
+
+        const msg =
+            await interaction.channel.messages.fetch(
+                claim.claimPanelMessageId
+            );
+
+        await msg.delete();
+
+    } catch {}
+}
 
 if (
     ownerId &&
@@ -2749,26 +4332,21 @@ adc.ownerId = null;
 adc.tickets = 0;
 adc.expiresAt = null;
 
-adc.reserve = null;
-adc.reserveId = null;
-adc.reserveExpiresAt = null;
-
     await saveData(data);
 
     await updatePanel(interaction.channel);
 
     return interaction.reply({
-        content:
-            `✅ ADC ${type.toUpperCase()} cleared.`,
-        flags: 64
-    });
+    content:
+        `✅ ${type.toUpperCase()} cleared.`,
+    flags: 64
+});
+
 }
 
 if (interaction.commandName === 'forceswap') {
 
-    await interaction.deferReply({
-        flags: 64
-    });
+    await interaction.deferReply({ flags: 64 });;
 
     const from =
         interaction.options.getString('from');
@@ -2784,11 +4362,42 @@ if (interaction.commandName === 'forceswap') {
         });
     }
 
-    const fromSpot =
-        data.channels[channelId].adc[from];
+    let fromSpot;
+let toSpot;
 
-    const toSpot =
-        data.channels[channelId].adc[to];
+if (from.startsWith('adc2_')) {
+
+    fromSpot =
+        data.channels[channelId]
+            .adc2[
+                from.replace('adc2_', '')
+            ];
+
+} else {
+
+    fromSpot =
+        data.channels[channelId]
+            .adc[
+                from.replace('adc_', '')
+            ];
+}
+
+if (to.startsWith('adc2_')) {
+
+    toSpot =
+        data.channels[channelId]
+            .adc2[
+                to.replace('adc2_', '')
+            ];
+
+} else {
+
+    toSpot =
+        data.channels[channelId]
+            .adc[
+                to.replace('adc_', '')
+            ];
+}
 
     if (!fromSpot.ownerId) {
 
@@ -2809,15 +4418,6 @@ if (interaction.commandName === 'forceswap') {
         tickets:
             fromSpot.tickets,
 
-        reserve:
-            fromSpot.reserve,
-
-        reserveId:
-            fromSpot.reserveId,
-
-        reserveExpiresAt:
-            fromSpot.reserveExpiresAt,
-
         expiresAt:
             fromSpot.expiresAt
     };
@@ -2831,15 +4431,6 @@ if (interaction.commandName === 'forceswap') {
     fromSpot.tickets =
         toSpot.tickets;
 
-    fromSpot.reserve =
-        toSpot.reserve;
-
-    fromSpot.reserveId =
-        toSpot.reserveId;
-
-    fromSpot.reserveExpiresAt =
-        toSpot.reserveExpiresAt;
-
     fromSpot.expiresAt =
         toSpot.expiresAt;
 
@@ -2852,51 +4443,106 @@ if (interaction.commandName === 'forceswap') {
     toSpot.tickets =
         temp.tickets;
 
-    toSpot.reserve =
-        temp.reserve;
-
-    toSpot.reserveId =
-        temp.reserveId;
-
-    toSpot.reserveExpiresAt =
-        temp.reserveExpiresAt;
-
     toSpot.expiresAt =
         temp.expiresAt;
 
-    if (
-        temp.ownerId &&
-        data.channels[channelId]
-            .userClaims[temp.ownerId]
-    ) {
+ if (
+    temp.ownerId &&
+    data.channels[channelId]
+        .userClaims[temp.ownerId]
+) {
 
+    const claim =
         data.channels[channelId]
-            .userClaims[temp.ownerId]
-            .spot = to;
+            .userClaims[temp.ownerId];
 
-        data.channels[channelId]
-            .userClaims[temp.ownerId]
-            .type =
-            `ADC ${to.toUpperCase()}`;
-    }
+    const newSpot =
+        to.startsWith('adc2_')
+            ? to.replace('adc2_', '')
+            : to.replace('adc_', '');
 
-    if (
-        fromSpot.ownerId &&
-        data.channels[channelId]
-            .userClaims[fromSpot.ownerId]
-    ) {
+    claim.spot =
+        newSpot;
 
-        data.channels[channelId]
-            .userClaims[fromSpot.ownerId]
-            .spot = from;
+    claim.chamberType =
+        to.startsWith('adc2_')
+            ? 'adc2'
+            : 'adc';
 
+    claim.type =
+        to.startsWith('adc2_')
+            ? `ADC I-II ${newSpot.toUpperCase()}`
+            : `ADC ${newSpot.toUpperCase()}`;
+}
+
+if (
+    fromSpot.ownerId &&
+    data.channels[channelId]
+        .userClaims[fromSpot.ownerId]
+) {
+
+    const claim =
         data.channels[channelId]
-            .userClaims[fromSpot.ownerId]
-            .type =
-            `ADC ${from.toUpperCase()}`;
-    }
+            .userClaims[fromSpot.ownerId];
+
+    const newSpot =
+        from.startsWith('adc2_')
+            ? from.replace('adc2_', '')
+            : from.replace('adc_', '');
+
+    claim.spot =
+        newSpot;
+
+    claim.chamberType =
+        from.startsWith('adc2_')
+            ? 'adc2'
+            : 'adc';
+
+    claim.type =
+        from.startsWith('adc2_')
+            ? `ADC I-II ${newSpot.toUpperCase()}`
+            : `ADC ${newSpot.toUpperCase()}`;
+}
 
     await saveData(data);
+
+for (const userId of [
+    temp.ownerId,
+    fromSpot.ownerId
+]) {
+
+    const claim =
+        data.channels[channelId]
+            ?.userClaims?.[userId];
+
+    if (
+        !claim?.claimPanelMessageId
+    ) continue;
+
+    try {
+
+        const panel =
+            await interaction.channel.messages.fetch(
+                claim.claimPanelMessageId
+            );
+
+        const user =
+            await client.users.fetch(
+                userId
+            );
+
+        await panel.edit({
+            content:
+`${user} currently owns ${claim.type}.`
+        });
+
+    } catch (err) {
+
+        console.log(
+            `[FORCESWAP] Failed to update claim panel for ${userId}`
+        );
+    }
+}
 
     await updatePanel(
         interaction.channel
@@ -2904,7 +4550,7 @@ if (interaction.commandName === 'forceswap') {
 
     return interaction.editReply({
     content:
-`✅ ADC ${from.toUpperCase()} ↔ ADC ${to.toUpperCase()} swapped.`
+`✅ ${from.toUpperCase()} ↔ ${to.toUpperCase()} swapped.`
 });
 
 }
@@ -2921,44 +4567,97 @@ if (interaction.commandName === 'settimer') {
         Date.now() + (minutes * 60 * 1000);
 
     if (
-        target === 'left' ||
-        target === 'center' ||
-        target === 'right'
+    target.startsWith('adc_') ||
+    target.startsWith('adc2_')
+) {
+
+    let spot;
+
+    if (target.startsWith('adc2_')) {
+
+        spot =
+            data.channels[channelId]
+                .adc2[
+                    target.replace('adc2_', '')
+                ];
+
+    } else {
+
+        spot =
+            data.channels[channelId]
+                .adc[
+                    target.replace('adc_', '')
+                ];
+    }
+
+    if (!spot.ownerId) {
+
+        return interaction.reply({
+            content:
+                `❌ ${target.toUpperCase()} is empty.`,
+            flags: 64
+        });
+    }
+
+    spot.expiresAt = expiresAt;
+
+    if (
+    spot.ownerId &&
+    data.channels[channelId]
+        .userClaims?.[spot.ownerId]
+) {
+
+    data.channels[channelId]
+        .userClaims[spot.ownerId]
+        .expiresAt = expiresAt;
+}
+
+}
+
+if (target.startsWith('boss_')) {
+
+    const slotName =
+        target.replace('boss_', '');
+
+    const boss =
+        data.channels[channelId]
+            .bossRotation?.[slotName];
+
+    if (!boss) {
+
+        return interaction.reply({
+            content: '❌ Invalid boss slot.',
+            flags: 64
+        });
+    }
+
+    if (!boss.ownerId) {
+
+        return interaction.reply({
+            content:
+                `❌ ${slotName.toUpperCase()} is empty.`,
+            flags: 64
+        });
+    }
+
+    boss.expiresAt =
+        expiresAt;
+
+    if (
+        boss.ownerId &&
+        data.channels[channelId]
+            .userClaims?.[
+                boss.ownerId
+            ]
     ) {
 
-        const spot =
-            data.channels[channelId].adc[target];
-
-        if (!spot.ownerId) {
-
-            return interaction.ediReply({
-                content:
-                    `❌ ADC ${target.toUpperCase()} is empty.`,
-            });
-        }
-
-        spot.expiresAt =
-            expiresAt;
+        data.channels[channelId]
+            .userClaims[
+                boss.ownerId
+            ]
+            .expiresAt = expiresAt;
     }
-
-    if (target === 'boss') {
-
-        const boss =
-            data.channels[channelId]
-                .bossRotation;
-
-        if (!boss.ownerId) {
-
-            return interaction.reply({
-                content:
-                    '❌ Boss Rotation is empty.',
-                flags: 64
-            });
-        }
-
-        boss.expiresAt =
-            expiresAt;
-    }
+}
 
     await saveData(data);
 
@@ -3036,6 +4735,10 @@ if (interaction.commandName === 'bosstimer') {
         case 'goldherb':
             respawnMinutes = 31;
             break;
+
+        case 'sealingchamber':
+            respawnMinutes = 31;
+            break;
     }
 
     const expiresAt =
@@ -3060,6 +4763,9 @@ if (boss === 'goldore')
 if (boss === 'goldherb')
     bosses.goldHerb.expiresAt = expiresAt;
 
+if (boss === 'sealingchamber')
+    bosses.sealingChamber.expiresAt = expiresAt;
+
     await saveData(data);
 
     await updatePanel(
@@ -3079,18 +4785,320 @@ Respawn: ${respawn.toLocaleTimeString()}`,
     });
 }
 
+if (interaction.commandName === 'setmode') {
+
+    const mode =
+        interaction.options.getString('mode');
+
+    data.channels[channelId].channelConfig ??= {
+        adcMode: 'single'
+    };
+
+    data.channels[channelId]
+        .channelConfig.adcMode = mode;
+
+    await saveData(data);
+
+    return interaction.reply({
+        content:
+            `✅ Channel mode set to ${mode.toUpperCase()}.`,
+        flags: 64
+    });
+}
+
+if (interaction.commandName === 'addms11') {
+
+    const data = loadData();
+
+    const channelId =
+        interaction.channel.id;
+
+    const discordUser =
+        interaction.options.getUser('user');
+
+    const manualName =
+        interaction.options.getString('name');
+
+    const chamber =
+        interaction.options.getString('chamber');
+
+    const tickets =
+        interaction.options.getInteger('tickets');
+
+const member = discordUser
+    ? await interaction.guild.members.fetch(
+        discordUser.id
+    )
+    : null;
+
+const name =
+    member?.displayName ??
+    manualName;
+
+    if (!name) {
+
+        return interaction.reply({
+            content:
+                '❌ Select a user or enter a name.',
+            flags: 64
+        });
+    }
+
+    data.channels[channelId]
+        .specialClaims ??= {};
+
+    const ownerId =
+        discordUser
+            ? discordUser.id
+            : `manual_${Date.now()}`;
+
+    if (
+        data.channels[channelId]
+            .specialClaims[ownerId]
+    ) {
+
+        return interaction.reply({
+            content:
+                '❌ User already owns a MS11 chamber.',
+            flags: 64
+        });
+    }
+
+    const expiresAt =
+        Date.now() +
+        (tickets * 30 * 60 * 1000);
+
+    const chamberData =
+        data.channels[channelId]
+            .specialChambers[chamber];
+
+    chamberData.claims.push({
+
+        owner: name,
+        ownerId,
+        tickets,
+        expiresAt,
+        claimPanelMessageId: null
+    });
+
+    data.channels[channelId]
+        .specialClaims[ownerId] = {
+
+        chamber,
+        tickets,
+        expiresAt,
+        claimPanelMessageId: null
+    };
+
+    if (discordUser) {
+
+        const panel =
+            await interaction.channel.send({
+
+                content:
+`${discordUser}
+
+🏠 Chamber: ${chamber.toUpperCase()}
+🎟 Tickets: ${tickets}`,
+
+                components: [
+                    new ActionRowBuilder()
+                        .addComponents(
+
+                            new ButtonBuilder()
+                                .setCustomId(
+                                    `claim_swap_${discordUser.id}`
+                                )
+                                .setLabel(
+                                    '🔄 Swap Chamber'
+                                )
+                                .setStyle(
+                                    ButtonStyle.Primary
+                                ),
+
+                            new ButtonBuilder()
+                                .setCustomId(
+                                    `claim_end_${discordUser.id}`
+                                )
+                                .setLabel(
+                                    '❌ End Claim'
+                                )
+                                .setStyle(
+                                    ButtonStyle.Danger
+                                )
+                        )
+                ]
+            });
+
+        const claim =
+            chamberData.claims.find(
+                x => x.ownerId === discordUser.id
+            );
+
+        if (claim) {
+
+            claim.claimPanelMessageId =
+                panel.id;
+        }
+
+        data.channels[channelId]
+            .specialClaims[
+                discordUser.id
+            ]
+            .claimPanelMessageId =
+                panel.id;
+    }
+
+    await saveData(data);
+
+    await updateMS11Panel(
+        interaction.channel
+    );
+
+    return interaction.reply({
+        content:
+            `✅ Added ${name} to ${chamber.toUpperCase()}.`,
+        flags: 64
+    });
+}
+
+if (interaction.commandName === 'removems11') {
+
+    const data = loadData();
+
+    const channelId = interaction.channel.id;
+
+    const channelData = data.channels?.[channelId];
+
+    if (!channelData) {
+        return interaction.reply({
+            content: '❌ This channel has no MS11 data.',
+            flags: 64
+        });
+    }
+
+    const user = interaction.options.getUser('user');
+    const manualName = interaction.options.getString('name');
+
+    if (!user && !manualName) {
+        return interaction.reply({
+            content: '❌ Provide a user or name.',
+            flags: 64
+        });
+    }
+
+    let userId;
+    let claim;
+
+    // DISCORD USER PATH
+
+    if (user) {
+
+        userId = user.id;
+
+        claim = channelData.specialClaims?.[userId];
+    }
+
+    // MANUAL NAME PATH
+
+    else {
+
+        const specialClaims = channelData.specialClaims;
+
+        const entry = Object.entries(specialClaims).find(([id, c]) => {
+
+            const chamber =
+                channelData.specialChambers?.[c.chamber];
+
+            if (!chamber) return false;
+
+            return chamber.claims.some(x =>
+                x.owner.toLowerCase() === manualName.toLowerCase()
+            );
+        });
+
+        if (!entry) {
+            return interaction.reply({
+                content: '❌ No matching manual name found.',
+                flags: 64
+            });
+        }
+
+        userId = entry[0];
+        claim = entry[1];
+    }
+
+    if (!claim) {
+        return interaction.reply({
+            content: '❌ User has no MS11 claim.',
+            flags: 64
+        });
+    }
+
+    const chamber =
+        channelData.specialChambers?.[claim.chamber];
+
+    if (!chamber) {
+        return interaction.reply({
+            content: '❌ Chamber not found.',
+            flags: 64
+        });
+    }
+
+    if (claim.claimPanelMessageId) {
+
+        try {
+            const msg =
+                await interaction.channel.messages.fetch(
+                    claim.claimPanelMessageId
+                );
+
+            await msg.delete();
+        } catch {}
+    }
+
+    chamber.claims =
+        chamber.claims.filter(
+            x => x.ownerId !== userId && x.owner !== manualName
+        );
+
+    delete channelData.specialClaims[userId];
+
+    await saveData(data);
+
+    await updateMS11Panel(interaction.channel);
+
+    return interaction.reply({
+        content: `✅ Removed ${user ? user.username : manualName} from ${claim.chamber.toUpperCase()}.`,
+        flags: 64
+    });
+}
+
 });
 
 // SLASH COMMANDS
 
 const commands = [
-    new SlashCommandBuilder()
-        .setName('setup')
-        .setDescription('Create chamber panel'),
+new SlashCommandBuilder()
+    .setName('setup')
+    .setDescription('Create chamber panel')
+    .setDefaultMemberPermissions(
+        PermissionFlagsBits.ManageGuild
+    ),
 
-    new SlashCommandBuilder()
-        .setName('removepanel')
-        .setDescription('Remove chamber panel'),
+new SlashCommandBuilder()
+    .setName('removepanel')
+    .setDescription('Remove chamber panel')
+    .setDefaultMemberPermissions(
+        PermissionFlagsBits.ManageGuild
+    ),
+
+new SlashCommandBuilder()
+.setName('setupms11')
+.setDescription('Create MS11 chamber panel')
+.setDefaultMemberPermissions(
+    PermissionFlagsBits.ManageGuild
+),
 
 new SlashCommandBuilder()
 .setName('removecd')
@@ -3121,11 +5129,18 @@ new SlashCommandBuilder()
         .setDescription('What to reset')
         .setRequired(true)
         .addChoices(
-            { name: 'LEFT', value: 'left' },
-            { name: 'CENTER', value: 'center' },
-            { name: 'RIGHT', value: 'right' },
-            { name: 'BOSS ROTATION', value: 'boss' }
-        )
+    { name: 'ADC I-I LEFT', value: 'adc_left' },
+    { name: 'ADC I-I CENTER', value: 'adc_center' },
+    { name: 'ADC I-I RIGHT', value: 'adc_right' },
+
+    { name: 'ADC I-II LEFT', value: 'adc2_left' },
+    { name: 'ADC I-II CENTER', value: 'adc2_center' },
+    { name: 'ADC I-II RIGHT', value: 'adc2_right' },
+
+    { name: 'Boss Rotation SLOT1', value: 'boss_slot1' },
+    { name: 'Boss Rotation SLOT2', value: 'boss_slot2' },
+    { name: 'Boss Rotation SLOT3', value: 'boss_slot3' }
+)
 )
 .setDefaultMemberPermissions(
     PermissionFlagsBits.ManageGuild
@@ -3141,10 +5156,15 @@ new SlashCommandBuilder()
         .setDescription('ADC spot')
         .setRequired(true)
         .addChoices(
-            { name: 'LEFT', value: 'left' },
-            { name: 'CENTER', value: 'center' },
-            { name: 'RIGHT', value: 'right' }
-        )
+    { name: 'ADC I-I LEFT', value: 'adc_left' },
+    { name: 'ADC I-I CENTER', value: 'adc_center' },
+    { name: 'ADC I-I RIGHT', value: 'adc_right' },
+
+    { name: 'ADC I-II LEFT', value: 'adc2_left' },
+    { name: 'ADC I-II CENTER', value: 'adc2_center' },
+    { name: 'ADC I-II RIGHT', value: 'adc2_right' }
+)
+
 )
 
 .addIntegerOption(option =>
@@ -3182,11 +5202,19 @@ new SlashCommandBuilder()
         .setDescription('Claim type')
         .setRequired(true)
         .addChoices(
-            { name: 'ADC LEFT', value: 'left' },
-            { name: 'ADC CENTER', value: 'center' },
-            { name: 'ADC RIGHT', value: 'right' },
-            { name: 'Boss Rotation', value: 'boss' }
-        )
+    { name: 'ADC I-I LEFT', value: 'adc_left' },
+    { name: 'ADC I-I CENTER', value: 'adc_center' },
+    { name: 'ADC I-I RIGHT', value: 'adc_right' },
+
+    { name: 'ADC I-II LEFT', value: 'adc2_left' },
+    { name: 'ADC I-II CENTER', value: 'adc2_center' },
+    { name: 'ADC I-II RIGHT', value: 'adc2_right' },
+
+    { name: 'Boss Rotation SLOT1', value: 'boss_slot1' },
+    { name: 'Boss Rotation SLOT2', value: 'boss_slot2' },
+    { name: 'Boss Rotation SLOT3', value: 'boss_slot3' }
+)
+
 )
 
 .setDefaultMemberPermissions(
@@ -3203,9 +5231,13 @@ new SlashCommandBuilder()
         .setDescription('Source spot')
         .setRequired(true)
         .addChoices(
-            { name: 'LEFT', value: 'left' },
-            { name: 'CENTER', value: 'center' },
-            { name: 'RIGHT', value: 'right' }
+            { name: 'ADC I-I LEFT', value: 'adc_left' },
+            { name: 'ADC I-I CENTER', value: 'adc_center' },
+            { name: 'ADC I-I RIGHT', value: 'adc_right' },
+
+            { name: 'ADC I-II LEFT', value: 'adc2_left' },
+            { name: 'ADC I-II CENTER', value: 'adc2_center' },
+            { name: 'ADC I-II RIGHT', value: 'adc2_right' }
         )
 )
 
@@ -3215,9 +5247,13 @@ new SlashCommandBuilder()
         .setDescription('Destination spot')
         .setRequired(true)
         .addChoices(
-            { name: 'LEFT', value: 'left' },
-            { name: 'CENTER', value: 'center' },
-            { name: 'RIGHT', value: 'right' }
+            { name: 'ADC I-I LEFT', value: 'adc_left' },
+            { name: 'ADC I-I CENTER', value: 'adc_center' },
+            { name: 'ADC I-I RIGHT', value: 'adc_right' },
+
+            { name: 'ADC I-II LEFT', value: 'adc2_left' },
+            { name: 'ADC I-II CENTER', value: 'adc2_center' },
+            { name: 'ADC I-II RIGHT', value: 'adc2_right' }
         )
 )
 
@@ -3234,11 +5270,19 @@ new SlashCommandBuilder()
     .setDescription('Spot to modify')
     .setRequired(true)
     .addChoices(
-        { name: 'ADC LEFT', value: 'left' },
-        { name: 'ADC CENTER', value: 'center' },
-        { name: 'ADC RIGHT', value: 'right' },
-        { name: 'Boss Rotation', value: 'boss' }
-    )
+    { name: 'ADC I-I LEFT', value: 'adc_left' },
+    { name: 'ADC I-I CENTER', value: 'adc_center' },
+    { name: 'ADC I-I RIGHT', value: 'adc_right' },
+
+    { name: 'ADC I-II LEFT', value: 'adc2_left' },
+    { name: 'ADC I-II CENTER', value: 'adc2_center' },
+    { name: 'ADC I-II RIGHT', value: 'adc2_right' },
+
+    { name: 'Boss Rotation SLOT1', value: 'boss_slot1' },
+    { name: 'Boss Rotation SLOT2', value: 'boss_slot2' },
+    { name: 'Boss Rotation SLOT3', value: 'boss_slot3' }
+)
+
 )
 .addIntegerOption(option =>
     option
@@ -3259,12 +5303,13 @@ new SlashCommandBuilder()
             .setDescription('Boss')
             .setRequired(true)
             .addChoices(
-                { name: 'Leader 1', value: 'leader1' },
-                { name: 'Leader 2', value: 'leader2' },
-                { name: 'Leader 3', value: 'leader3' },
-                { name: 'Gold Ore', value: 'goldore' },
-                { name: 'Gold Herb', value: 'goldherb' }
-            )
+    { name: 'Leader 1', value: 'leader1' },
+    { name: 'Leader 2', value: 'leader2' },
+    { name: 'Leader 3', value: 'leader3' },
+    { name: 'Gold Ore', value: 'goldore' },
+    { name: 'Gold Herb', value: 'goldherb' },
+    { name: 'Sealing Chamber', value: 'sealingchamber' }
+)
     )
     .addStringOption(option =>
         option
@@ -3275,6 +5320,89 @@ new SlashCommandBuilder()
     .setDefaultMemberPermissions(
         PermissionFlagsBits.ManageGuild
     ),
+
+new SlashCommandBuilder()
+.setName('setmode')
+.setDescription('Set ADC mode for this channel')
+
+.addStringOption(option =>
+    option
+        .setName('mode')
+        .setDescription('ADC mode')
+        .setRequired(true)
+        .addChoices(
+            { name: 'Single ADC', value: 'single' },
+            { name: 'Dual ADC', value: 'dual' }
+        )
+)
+
+.setDefaultMemberPermissions(
+    PermissionFlagsBits.ManageGuild
+),
+
+new SlashCommandBuilder()
+.setName('addms11')
+.setDescription('Add user to MS11 chamber')
+
+.addStringOption(option =>
+    option
+        .setName('chamber')
+        .setDescription('Chamber')
+        .setRequired(true)
+        .addChoices(
+            { name: 'Frenzy', value: 'frenzy' },
+            { name: 'Fury', value: 'fury' },
+            { name: 'Lucky', value: 'lucky' },
+            { name: 'Others', value: 'others' }
+        )
+)
+
+.addIntegerOption(option =>
+    option
+        .setName('tickets')
+        .setDescription('Tickets')
+        .setRequired(true)
+)
+
+.addUserOption(option =>
+    option
+        .setName('user')
+        .setDescription('Discord User')
+        .setRequired(false)
+)
+
+.addStringOption(option =>
+    option
+        .setName('name')
+        .setDescription('Manual Name')
+        .setRequired(false)
+)
+
+.setDefaultMemberPermissions(
+    PermissionFlagsBits.ManageGuild
+),
+
+new SlashCommandBuilder()
+.setName('removems11')
+.setDescription('Remove user from MS11')
+.addUserOption(option =>
+    option
+        .setName('user')
+        .setDescription('Discord User')
+        .setRequired(false)
+)
+
+.addStringOption(option =>
+    option
+        .setName('name')
+        .setDescription('Manual Name')
+        .setRequired(false)
+)
+
+.setDefaultMemberPermissions(
+    PermissionFlagsBits.ManageGuild
+),
+
 
 ]
 .map(command => command.toJSON());
@@ -3297,6 +5425,8 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     }
 })();
 
+console.log('[INTERVAL CREATED]');
+
 setInterval(async () => {
 
     const data = loadData();
@@ -3305,99 +5435,166 @@ setInterval(async () => {
 
         try {
 
-    const channel =
-        await client.channels.fetch(channelId);
+            if (!data.channels[channelId]) {
+                continue;
+            }
 
-    if (!channel) continue;
+            const channel =
+                await client.channels.fetch(channelId);
 
-    const boss =
-        data.channels[channelId].bossRotation;
+            const chambers =
+    data.channels[channelId]
+        ?.specialChambers;
 
-    if (
-    boss.ownerId &&
-    boss.expiresAt &&
-    Date.now() >= boss.expiresAt
-) {
+if (chambers) {
 
-    console.log(
-        `[EXPIRED] Boss Rotation released`
-    );
+    for (const chamberName of Object.keys(chambers)) {
 
-    const claim =
-        data.channels[channelId]
-        .userClaims[boss.ownerId];
+        const chamber =
+            chambers[chamberName];
 
-    if (claim?.claimPanelMessageId) {
+        if (!chamber.claims) continue;
 
-        try {
+        for (const claim of [...chamber.claims]) {
 
-            const msg =
-                await channel.messages.fetch(
-                    claim.claimPanelMessageId
+            if (
+                claim.expiresAt &&
+                Date.now() >= claim.expiresAt
+            ) {
+
+                if (claim.claimPanelMessageId) {
+
+                    try {
+
+                        const msg =
+                            await channel.messages.fetch(
+                                claim.claimPanelMessageId
+                            );
+
+                        await msg.delete();
+
+                    } catch {}
+                }
+
+                chamber.claims =
+                    chamber.claims.filter(
+                        c => c.ownerId !== claim.ownerId
+                    );
+
+                 
+
+                delete data.channels[channelId]
+                    .specialClaims?.[
+                        claim.ownerId
+                    ];
+
+                console.log(
+                    `[MS11 EXPIRED] ${chamberName} ${claim.owner}`
                 );
-
-            await msg.delete();
-
-        } catch (err) {
-
-            console.log(
-                '[EXPIRE] Boss claim panel already deleted.'
-            );
+            }
         }
     }
+}
 
-    delete data.channels[channelId]
-        .userClaims[boss.ownerId];
+            if (!channel) continue;
 
-    boss.owner = null;
-    boss.ownerId = null;
-    boss.tickets = 0;
-    boss.expiresAt = null;
+            if (!data.channels[channelId].bossRotation) {
 
-    await saveData(data);
+    data.channels[channelId].bossRotation = {
 
-    await updatePanel(channel);
+        slot1: {
+            owner: null,
+            ownerId: null,
+            tickets: 0,
+            expiresAt: null
+        },
+
+        slot2: {
+            owner: null,
+            ownerId: null,
+            tickets: 0,
+            expiresAt: null
+        },
+
+        slot3: {
+            owner: null,
+            ownerId: null,
+            tickets: 0,
+            expiresAt: null
+        }
+
+    };
+
+}
+
+            const bossSlots = [
+    'slot1',
+    'slot2',
+    'slot3'
+];
+
+for (const slotName of bossSlots) {
+
+    const boss =
+        data.channels[channelId]
+            .bossRotation?.[slotName];
+
+    if (
+        boss?.ownerId &&
+        boss?.expiresAt &&
+        Date.now() >= boss.expiresAt
+    ) {
+
+        console.log(
+            `[EXPIRED] Boss Rotation ${slotName}`
+        );
+
+        const claim =
+            data.channels[channelId]
+                ?.userClaims?.[
+                    boss.ownerId
+                ];
+
+        if (claim?.claimPanelMessageId) {
+
+            try {
+
+                const msg =
+                    await channel.messages.fetch(
+                        claim.claimPanelMessageId
+                    );
+
+                await msg.delete();
+
+            } catch {}
+        }
+
+        delete data.channels[channelId]
+            ?.userClaims?.[
+                boss.ownerId
+            ];
+
+        boss.owner = null;
+        boss.ownerId = null;
+        boss.tickets = 0;
+        boss.expiresAt = null;
+    }
 }
 
     const adcSpots = ['left', 'center', 'right'];
 
+    if (!data.channels[channelId]?.adc)
+    continue;
+
+    if (!data.channels[channelId]?.adc2)
+    continue;
+
     for (const spot of adcSpots) {
 
     const adc =
-        data.channels[channelId].adc[spot];
+        data.channels[channelId]?.adc?.[spot];
 
-    if (
-    adc.reserveId &&
-    adc.reserveExpiresAt &&
-    Date.now() >= adc.reserveExpiresAt
-) {
-
-    const expiredReserveId =
-        adc.reserveId;
-
-    await addCooldown(
-        data,
-        channelId,
-        expiredReserveId
-    );
-
-    console.log(
-        `[RESERVE EXPIRED] ADC ${spot.toUpperCase()}`
-    );
-
-    adc.reserve = null;
-    adc.reserveId = null;
-    adc.reserveExpiresAt = null;
-
-    await sendAutoDelete(
-        channel,
-        `🟢 Reserve expired. ADC ${spot.toUpperCase()} is now open.`
-    );
-
-    await saveData(data);
-
-    await updatePanel(channel);
-}
+    if (!adc) continue;
 
     if (
         adc.ownerId &&
@@ -3410,8 +5607,8 @@ setInterval(async () => {
             );
 
             const claim =
-             data.channels[channelId]
-             .userClaims[adc.ownerId];
+     data.channels[channelId]
+     ?.userClaims?.[adc.ownerId];
 
 if (claim?.claimPanelMessageId) {
 
@@ -3433,38 +5630,99 @@ if (claim?.claimPanelMessageId) {
 
 const expiredOwnerId = adc.ownerId;
 
-delete data.channels[channelId]
-    .userClaims[expiredOwnerId];
+if (data.channels[channelId]?.userClaims) {
+
+    delete data.channels[channelId]
+        .userClaims[expiredOwnerId];
+
+}
 
       adc.owner = null;
       adc.ownerId = null;
       adc.tickets = 0;
       adc.expiresAt = null;
 
-       if (adc.reserveId) {
-
-    adc.reserveExpiresAt =
-        Date.now() + (3 * 60 * 1000);
-
-    await sendAutoDelete(
-        channel,
-        `<@${adc.reserveId}> You have 3 minutes to claim ADC ${spot.toUpperCase()}.`
-    );
-
-} else {
-
-    await sendAutoDelete(
-        channel,
-        `🟢 ADC ${spot.toUpperCase()} is now available.`
-    );
-
-}
+await sendAutoDelete(
+    channel,
+    `🟢 ADC I-I ${spot.toUpperCase()} is now available.`
+);
         }
     }
 
-    await saveData(data);
+for (const spot of adcSpots) {
 
-    await updatePanel(channel);
+    const adc =
+        data.channels[channelId]?.adc2?.[spot];
+
+    if (!adc) continue;
+
+    if (
+        adc.ownerId &&
+        adc.expiresAt &&
+        Date.now() >= adc.expiresAt
+    ) {
+
+        console.log(
+            `[EXPIRED] ADC I-II ${spot.toUpperCase()} released`
+        );
+
+        const claim =
+            data.channels[channelId]
+            ?.userClaims?.[adc.ownerId];
+
+        if (claim?.claimPanelMessageId) {
+
+            try {
+
+                const msg =
+                    await channel.messages.fetch(
+                        claim.claimPanelMessageId
+                    );
+
+                await msg.delete();
+
+            } catch (err) {
+
+                console.log(
+                    '[EXPIRE] Claim panel already deleted.'
+                );
+            }
+        }
+
+        const expiredOwnerId =
+            adc.ownerId;
+
+        if (data.channels[channelId]?.userClaims) {
+
+            delete data.channels[channelId]
+                .userClaims[expiredOwnerId];
+        }
+
+        adc.owner = null;
+        adc.ownerId = null;
+        adc.tickets = 0;
+        adc.expiresAt = null;
+
+        await sendAutoDelete(
+            channel,
+            `🟢 ADC I-II ${spot.toUpperCase()} is now available.`
+        );
+    }
+}
+
+await saveData(data);
+
+if (data.channels[channelId].panelMessageId) {
+
+    await updatePanel(channel, data);
+
+}
+
+if (data.channels[channelId].ms11PanelMessageId) {
+
+    await updateMS11Panel(channel, data);
+
+}
 
         } catch (err) {
             console.error(
@@ -3476,7 +5734,4 @@ delete data.channels[channelId]
 
 }, 15000);
 
-
 client.login(process.env.TOKEN);
-
-

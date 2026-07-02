@@ -136,11 +136,37 @@ function loadData() {
         );
     }
 
-    try {
+try {
 
-    return JSON.parse(
+    const data = JSON.parse(
         fs.readFileSync('data.json')
     );
+
+    data.channels ??= {};
+
+    for (const channelId of Object.keys(data.channels)) {
+
+        const defaults = defaultServerData();
+
+        data.channels[channelId] = {
+            ...defaults,
+            ...data.channels[channelId]
+        };
+
+        data.channels[channelId].adc ??= defaults.adc;
+        data.channels[channelId].adc2 ??= defaults.adc2;
+        data.channels[channelId].bossRotation ??= defaults.bossRotation;
+        data.channels[channelId].bosses ??= defaults.bosses;
+        data.channels[channelId].specialChambers ??= defaults.specialChambers;
+        data.channels[channelId].specialClaims ??= {};
+        data.channels[channelId].userClaims ??= {};
+        data.channels[channelId].userCooldowns ??= {};
+        data.channels[channelId].channelConfig ??= {
+            adcMode: 'single'
+        };
+    }
+
+    return data;
 
 } catch (err) {
 
@@ -209,18 +235,33 @@ async function addCooldown(
 
 // Save Data
 
-let saveQueue =
-    Promise.resolve();
+let saveQueue = Promise.resolve();
 
 function saveData(data) {
 
-    saveQueue =
-        saveQueue.then(() =>
-            fs.promises.writeFile(
-                'data.json',
-                JSON.stringify(data, null, 2)
-            )
+    saveQueue = saveQueue.then(async () => {
+
+        const json =
+            JSON.stringify(data, null, 2);
+
+        await fs.promises.writeFile(
+            'data.tmp',
+            json
         );
+
+        await fs.promises.rename(
+            'data.tmp',
+            'data.json'
+        );
+
+    }).catch(err => {
+
+        console.error(
+            '[SAVE ERROR]',
+            err
+        );
+
+    });
 
     return saveQueue;
 }
@@ -267,6 +308,33 @@ async function sendAutoDelete(
 
 require('dotenv').config();
 
+process.on('unhandledRejection', (reason) => {
+
+    console.error(
+        '[UNHANDLED REJECTION]',
+        reason
+    );
+
+});
+
+process.on('uncaughtException', (err) => {
+
+    console.error(
+        '[UNCAUGHT EXCEPTION]',
+        err
+    );
+
+});
+
+process.on('uncaughtExceptionMonitor', (err) => {
+
+    console.error(
+        '[UNCAUGHT EXCEPTION MONITOR]',
+        err
+    );
+
+});
+
 const {
     Client,
     GatewayIntentBits,
@@ -295,7 +363,7 @@ client.once('clientReady', async () => {
 
     const data = loadData();
 
-    for (const channelId of Object.keys(data.channels || {})) {
+for (const channelId of Object.keys(data.channels || {})) {
 
     try {
 
@@ -312,7 +380,12 @@ client.once('clientReady', async () => {
             `[RESTORE FAILED] ${channelId}`
         );
 
+        delete data.channels[channelId];
+
+        await saveData(data);
+
     }
+
 }
 
 });
@@ -895,7 +968,9 @@ if (cooldown) {
         content:
 `❌ You are on cooldown (${formatCooldown(cooldown - Date.now())})`,
         flags: 64
+
     });
+
 }
 
 if (!data.channels[channelId].userClaims) {
@@ -1204,16 +1279,20 @@ if (interaction.customId === 'endclaim') {
                 .bossRotation?.[claim.bossSlot];
 
         if (slot) {
-            slot.owner = null;
-            slot.ownerId = null;
-            slot.tickets = 0;
-            slot.expiresAt = null;
-        }
+    slot.owner = null;
+    slot.ownerId = null;
+    slot.tickets = 0;
+    slot.expiresAt = null;
+}
 
-        delete data.channels[channelId]
-            .userClaims[userId];
+console.log(
+    `[BOSS ROTATION END] ${interaction.member.displayName} | ${claim.bossSlot.toUpperCase()}`
+);
 
-        await saveData(data);
+delete data.channels[channelId]
+    .userClaims[userId];
+
+await saveData(data);
 
         await updatePanel(interaction.channel);
 
@@ -3660,6 +3739,10 @@ if (!interaction.isChatInputCommand()) return;
 const data = loadData();
 const channelId = interaction.channel.id;
 
+console.log(
+    `[ADMIN] ${interaction.member.displayName} | /${interaction.commandName}`
+);
+
 if (interaction.commandName === 'setup') {
 
   await interaction.deferReply({ ephemeral: true });
@@ -5431,20 +5514,27 @@ setInterval(async () => {
 
     const data = loadData();
 
-    for (const channelId of Object.keys(data.channels || {})) {
+for (const channelId of Object.keys(data.channels || {})) {
 
-        try {
+    try {
 
-            if (!data.channels[channelId]) {
-                continue;
-            }
+        const channelData =
+            data.channels[channelId];
 
-            const channel =
-                await client.channels.fetch(channelId);
+        if (!channelData) {
+
+            console.warn(
+                `[AUTO REFRESH] Missing channel data: ${channelId}`
+            );
+
+            continue;
+        }
+
+        const channel =
+            await client.channels.fetch(channelId);
 
             const chambers =
-    data.channels[channelId]
-        ?.specialChambers;
+    channelData.specialChambers;
 
 if (chambers) {
 
@@ -5498,9 +5588,9 @@ if (chambers) {
 
             if (!channel) continue;
 
-            if (!data.channels[channelId].bossRotation) {
+            if (!channelData.bossRotation) {
 
-    data.channels[channelId].bossRotation = {
+    channelData.bossRotation = {
 
         slot1: {
             owner: null,
@@ -5536,8 +5626,7 @@ if (chambers) {
 for (const slotName of bossSlots) {
 
     const boss =
-        data.channels[channelId]
-            .bossRotation?.[slotName];
+    channelData.bossRotation?.[slotName];
 
     if (
         boss?.ownerId &&
@@ -5546,14 +5635,13 @@ for (const slotName of bossSlots) {
     ) {
 
         console.log(
-            `[EXPIRED] Boss Rotation ${slotName}`
-        );
+    `[BOSS ROTATION EXPIRED] ${boss.owner} | ${slotName.toUpperCase()}`
+);
 
         const claim =
-            data.channels[channelId]
-                ?.userClaims?.[
-                    boss.ownerId
-                ];
+    channelData.userClaims?.[
+        boss.ownerId
+    ];
 
         if (claim?.claimPanelMessageId) {
 
@@ -5569,10 +5657,9 @@ for (const slotName of bossSlots) {
             } catch {}
         }
 
-        delete data.channels[channelId]
-            ?.userClaims?.[
-                boss.ownerId
-            ];
+        delete channelData.userClaims?.[
+    boss.ownerId
+];
 
         boss.owner = null;
         boss.ownerId = null;
@@ -5583,16 +5670,16 @@ for (const slotName of bossSlots) {
 
     const adcSpots = ['left', 'center', 'right'];
 
-    if (!data.channels[channelId]?.adc)
+    if (!channelData.adc)
     continue;
 
-    if (!data.channels[channelId]?.adc2)
+    if (!channelData.adc2)
     continue;
 
     for (const spot of adcSpots) {
 
     const adc =
-        data.channels[channelId]?.adc?.[spot];
+    channelData.adc?.[spot];
 
     if (!adc) continue;
 
@@ -5603,12 +5690,13 @@ for (const slotName of bossSlots) {
     ) {
 
             console.log(
-                `[EXPIRED] ADC ${spot.toUpperCase()} released`
-            );
+    `[ADC I EXPIRED] ${adc.owner} | ${spot.toUpperCase()}`
+);
 
             const claim =
-     data.channels[channelId]
-     ?.userClaims?.[adc.ownerId];
+    channelData.userClaims?.[
+        adc.ownerId
+    ];
 
 if (claim?.claimPanelMessageId) {
 
@@ -5630,10 +5718,11 @@ if (claim?.claimPanelMessageId) {
 
 const expiredOwnerId = adc.ownerId;
 
-if (data.channels[channelId]?.userClaims) {
+if (channelData.userClaims) {
 
-    delete data.channels[channelId]
-        .userClaims[expiredOwnerId];
+    delete channelData.userClaims[
+        expiredOwnerId
+    ];
 
 }
 
@@ -5652,7 +5741,7 @@ await sendAutoDelete(
 for (const spot of adcSpots) {
 
     const adc =
-        data.channels[channelId]?.adc2?.[spot];
+    channelData.adc2?.[spot];
 
     if (!adc) continue;
 
@@ -5663,12 +5752,13 @@ for (const spot of adcSpots) {
     ) {
 
         console.log(
-            `[EXPIRED] ADC I-II ${spot.toUpperCase()} released`
-        );
+    `[ADC II EXPIRED] ${adc.owner} | ${spot.toUpperCase()}`
+);
 
         const claim =
-            data.channels[channelId]
-            ?.userClaims?.[adc.ownerId];
+    channelData.userClaims?.[
+        adc.ownerId
+    ];
 
         if (claim?.claimPanelMessageId) {
 
@@ -5692,11 +5782,12 @@ for (const spot of adcSpots) {
         const expiredOwnerId =
             adc.ownerId;
 
-        if (data.channels[channelId]?.userClaims) {
+        if (channelData.userClaims) {
 
-            delete data.channels[channelId]
-                .userClaims[expiredOwnerId];
-        }
+    delete channelData.userClaims[
+        expiredOwnerId
+    ];
+}
 
         adc.owner = null;
         adc.ownerId = null;
@@ -5712,13 +5803,13 @@ for (const spot of adcSpots) {
 
 await saveData(data);
 
-if (data.channels[channelId].panelMessageId) {
+if (channelData.panelMessageId) {
 
     await updatePanel(channel, data);
 
 }
 
-if (data.channels[channelId].ms11PanelMessageId) {
+if (channelData.ms11PanelMessageId) {
 
     await updateMS11Panel(channel, data);
 
